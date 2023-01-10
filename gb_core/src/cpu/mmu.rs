@@ -10,11 +10,11 @@ impl MMU {
         }
     }
 
-    pub fn reset(&self) {
+    pub fn reset(&mut self) {
         self.ram = [0; RAM_SIZE];
     }
 
-    pub fn write(&self, start: usize, end: usize, data: &[u8]) {
+    pub fn write(&mut self, start: usize, end: usize, data: &[u8]) {
         self.ram[start..end].copy_from_slice(data);
     }
 
