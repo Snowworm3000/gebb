@@ -63,32 +63,36 @@ impl Cpu {
     }
 
     fn execute(&mut self, op: u8) {
-        let length = match op {
+        let timing = match op {
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
-            0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 1}
+            0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 2}
+
+            // 0x0e => {}
 
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
-            0x12 => {self.mmu.write_byte(self.reg.get_de() as usize, self.reg.a); 1}
+            0x12 => {self.mmu.write_byte(self.reg.get_de() as usize, self.reg.a); 2}
             
+            0x20 => {if !self.reg.getFlag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
-            0x22 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 1}
+            0x22 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
 
+            0x30 => {if !self.reg.getFlag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
-            0x32 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 1}
+            0x32 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
 
-            0xaf => {self.xor(self.reg.a); 4}
+            0xaf => {self.xor(self.reg.a); 1}
 
             0xcb => {
                 let op = self.fetch_byte();
-                let length = match op {
+                let timing = match op {
                     0x7c => {self.bit(7, self.reg.h); 2}
                     _ => unimplemented!("Unimplemented CB prefixed opcode: {:#04x}", op)
                 };
-                (length + 1)
+                timing + 1
             }
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
-        print!("length of execution {}\n", length);
+        print!("length of execution {}\n", timing);
     }
 
     fn xor(&mut self, val: u8) {
@@ -98,5 +102,9 @@ impl Cpu {
     fn bit(&mut self, pos: u8, reg: u8){ // TODO: Less unnecessary casting could improve performance
         let bit = if (reg >> pos) == 1 {true} else {false};
         self.reg.setFlag(pos, bit);
+    }
+
+    fn jr(&mut self) {
+        self.pc = self.pc + (self.fetch_byte() as i8) as u16
     }
 }
