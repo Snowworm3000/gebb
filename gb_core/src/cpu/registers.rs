@@ -54,6 +54,12 @@ impl Registers{
         if flag == 1 {return true} else {return false};
     }
 
+    fn setFlag(&self, flag: u8, value: bool) {
+        let num: u8 = if value {0b1} else {0b0};
+        let mask = num << flag;
+        self.f |= num;
+    }
+
     
 }
 
