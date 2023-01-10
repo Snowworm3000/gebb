@@ -49,15 +49,15 @@ impl Registers{
         self.l = v as u8;
     }
 
-    fn getFlag(&self, flag: u8) -> bool {
+    pub fn getFlag(&self, flag: u8) -> bool {
         let flag = self.f >> flag;
         if flag == 1 {return true} else {return false};
     }
 
-    fn setFlag(&self, flag: u8, value: bool) {
+    pub fn setFlag(&mut self, flag: u8, value: bool) {
         let num: u8 = if value {0b1} else {0b0};
         let mask = num << flag;
-        self.f |= num;
+        self.f |= mask;
     }
 
     

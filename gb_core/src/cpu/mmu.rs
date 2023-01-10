@@ -1,4 +1,4 @@
-const RAM_SIZE: usize = 0x100;
+const RAM_SIZE: usize = 0x10000;
 pub struct MMU {
     ram: [u8; RAM_SIZE],
 }
@@ -16,6 +16,10 @@ impl MMU {
 
     pub fn write(&mut self, start: usize, end: usize, data: &[u8]) {
         self.ram[start..end].copy_from_slice(data);
+    }
+
+    pub fn write_byte(&mut self, pointer: usize, data: u8){
+        self.ram[pointer] = data;
     }
 
     pub fn read_byte(&self, loc: usize) -> u8 {

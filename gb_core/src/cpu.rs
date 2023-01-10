@@ -65,15 +65,27 @@ impl Cpu {
     fn execute(&mut self, op: u8) {
         let length = match op {
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
+            0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 1}
 
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
+            0x12 => {self.mmu.write_byte(self.reg.get_de() as usize, self.reg.a); 1}
             
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
+            0x22 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 1}
 
             0x31 => {self.sp = self.fetch_word(); 3}
-            0x32 => {self.reg.a -= self.reg.get_hl(); 1}
+            0x32 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 1}
 
             0xaf => {self.xor(self.reg.a); 4}
+
+            0xcb => {
+                let op = self.fetch_byte();
+                let length = match op {
+                    0x7c => {self.bit(7, self.reg.h); 2}
+                    _ => unimplemented!("Unimplemented CB prefixed opcode: {:#04x}", op)
+                };
+                (length + 1)
+            }
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         print!("length of execution {}\n", length);
@@ -81,5 +93,10 @@ impl Cpu {
 
     fn xor(&mut self, val: u8) {
         self.reg.a |= val; 
+    }
+
+    fn bit(&mut self, pos: u8, reg: u8){ // TODO: Less unnecessary casting could improve performance
+        let bit = if (reg >> pos) == 1 {true} else {false};
+        self.reg.setFlag(pos, bit);
     }
 }
