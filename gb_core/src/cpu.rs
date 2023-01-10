@@ -63,8 +63,23 @@ impl Cpu {
     }
 
     fn execute(&mut self, op: u8) {
-        match op {
+        let length = match op {
+            0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
+
+            0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
+            
+            0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
+
+            0x31 => {self.sp = self.fetch_word(); 3}
+            0x32 => {self.reg.a -= self.reg.get_hl(); 1}
+
+            0xaf => {self.xor(self.reg.a); 4}
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
-        }
+        };
+        print!("length of execution {}\n", length);
+    }
+
+    fn xor(&mut self, val: u8) {
+        self.reg.a |= val; 
     }
 }

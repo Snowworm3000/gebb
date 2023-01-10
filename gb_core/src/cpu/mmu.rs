@@ -23,9 +23,7 @@ impl MMU {
     }
 
     pub fn read_word(&self, loc: usize) -> u16 {
-        let upper = self.ram[loc + 1] as u16;
-        let lower = self.ram[loc] as u16;
-        (upper & lower)
+        (self.read_byte(loc) as u16 | ((self.read_byte(loc + 1) as u16) << 8 ))
     }
 
 
