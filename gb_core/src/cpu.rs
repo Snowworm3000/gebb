@@ -82,7 +82,7 @@ impl Cpu {
             0x1d => {self.reg.e -= 1; 1}
             0x1e => {self.reg.e = self.fetch_byte(); 2}
             
-            0x20 => {if !self.reg.getFlag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
+            0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
             0x22 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
 
@@ -90,7 +90,7 @@ impl Cpu {
             0x2d => {self.reg.l -= 1; 1}
             0x2e => {self.reg.l = self.fetch_byte(); 2}
 
-            0x30 => {if !self.reg.getFlag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
+            0x30 => {if !self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
             0x32 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
 
@@ -118,29 +118,29 @@ impl Cpu {
     }
 
     fn rla(&mut self, val: u8) -> u8 {
-        self.reg.setFlag(flags::C, (val >> 7) == 1);
+        self.reg.set_flag(flags::C, (val >> 7) == 1);
         val.rotate_left(1)
     }
 
     fn rlca(&mut self, val: u8) -> u8 {
-        let right_bit = (if self.reg.getFlag(flags::C) {1 as u8} else {0 as u8}) >> 7;
-        self.reg.setFlag(flags::C, (val >> 7) == 1);
+        let right_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) >> 7;
+        self.reg.set_flag(flags::C, (val >> 7) == 1);
         (val << 1) | right_bit
     }
 
     fn inc(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_add(1);
-        if res == 0 {self.reg.setFlag(flags::Z, true)} else {self.reg.setFlag(flags::Z, false)}
-        self.reg.setFlag(flags::N, false);
-        self.reg.setFlag(flags::H, carry);
+        if res == 0 {self.reg.set_flag(flags::Z, true)} else {self.reg.set_flag(flags::Z, false)}
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, carry);
         res
     }
 
     fn dec(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_sub(1);
-        self.reg.setFlag(flags::Z, res == 0);
-        self.reg.setFlag(flags::N, true);
-        self.reg.setFlag(flags::H, carry);
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::N, true);
+        self.reg.set_flag(flags::H, carry);
         res
     }
 
@@ -150,7 +150,7 @@ impl Cpu {
 
     fn bit(&mut self, pos: u8, reg: u8){ // TODO: Less unnecessary casting could improve performance
         let bit = if (reg >> pos) == 1 {true} else {false};
-        self.reg.setFlag(pos, bit);
+        self.reg.set_flag(pos, bit);
     }
 
     fn jr(&mut self) {

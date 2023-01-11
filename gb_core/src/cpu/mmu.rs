@@ -31,7 +31,7 @@ impl MMU {
     }
 
     pub fn read_word(&self, loc: usize) -> u16 {
-        (self.read_byte(loc) as u16 | ((self.read_byte(loc + 1) as u16) << 8 ))
+        self.read_byte(loc) as u16 | ((self.read_byte(loc + 1) as u16) << 8 )
     }
 
 

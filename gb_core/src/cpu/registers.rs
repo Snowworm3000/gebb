@@ -91,12 +91,12 @@ impl Registers{
     //     }
     // }
 
-    pub fn getFlag(&self, flag: u8) -> bool {
+    pub fn get_flag(&self, flag: u8) -> bool {
         let flag = self.f >> flag;
         if flag == 1 {return true} else {return false};
     }
 
-    pub fn setFlag(&mut self, flag: u8, value: bool) {
+    pub fn set_flag(&mut self, flag: u8, value: bool) {
         let num: u8 = if value {0b1} else {0b0};
         let mask = num << flag;
         self.f |= mask;
