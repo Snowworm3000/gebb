@@ -66,21 +66,38 @@ impl Cpu {
         let timing = match op {
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 2}
+            0x03 => {self.reg.increment(registers::BC)}
 
-            // 0x0e => {}
+            0x0c => {self.reg.c += 1; 1}
+            0x0d => {self.reg.c -= 1; 1}
+            0x0e => {self.reg.c = self.fetch_byte(); 2}
 
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de() as usize, self.reg.a); 2}
+
+            0x1c => {self.reg.e += 1; 1}
+            0x1d => {self.reg.e -= 1; 1}
+            0x1e => {self.reg.e = self.fetch_byte(); 2}
             
             0x20 => {if !self.reg.getFlag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
             0x22 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
 
+            0x2c => {self.reg.l += 1; 1}
+            0x2d => {self.reg.l -= 1; 1}
+            0x2e => {self.reg.l = self.fetch_byte(); 2}
+
             0x30 => {if !self.reg.getFlag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
             0x32 => {self.mmu.write_byte(self.reg.get_hl() as usize, self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
 
+            0x3c => {self.reg.a += 1; 1}
+            0x3d => {self.reg.a -= 1; 1}
+            0x3e => {self.reg.a = self.fetch_byte(); 2}
+
             0xaf => {self.xor(self.reg.a); 1}
+
+            0xe2 => {let pointer = self.mmu.read_pointer(0xff00) as usize; self.mmu.write_byte(pointer, self.reg.a); 2}
 
             0xcb => {
                 let op = self.fetch_byte();

@@ -22,6 +22,10 @@ impl MMU {
         self.ram[pointer] = data;
     }
 
+    pub fn read_pointer(&mut self, pointer: usize) -> u8{ // Read data at pointer location
+        self.ram[pointer]
+    }
+
     pub fn read_byte(&self, loc: usize) -> u8 {
         self.ram[loc]
     }
