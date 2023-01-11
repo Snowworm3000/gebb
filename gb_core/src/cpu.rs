@@ -1,4 +1,6 @@
 mod registers;
+use std::str::pattern::CharArrayRefSearcher;
+
 use registers::*;
 mod mmu;
 use mmu::*;
@@ -66,7 +68,10 @@ impl Cpu {
         let timing = match op {
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 2}
-            0x03 => {self.reg.increment(registers::BC)}
+            0x03 => {self.reg.set_bc(self.reg.get_bc().wrapping_add(1)); 2}
+            0x04 => {self.reg.b = self.inc(self.reg.b); 1}
+            0x05 => {self.reg.b = self.dec(self.reg.b); 1}
+            0x06 => {self.reg.b = self.fetch_byte(); 2}
 
             0x0c => {self.reg.c += 1; 1}
             0x0d => {self.reg.c -= 1; 1}
@@ -95,6 +100,8 @@ impl Cpu {
             0x3d => {self.reg.a -= 1; 1}
             0x3e => {self.reg.a = self.fetch_byte(); 2}
 
+            // 0x77 => {let self.mmu.read_pointer(self.reg.get_hl()); }
+
             0xaf => {self.xor(self.reg.a); 1}
 
             0xe2 => {let pointer = self.mmu.read_pointer(0xff00) as usize; self.mmu.write_byte(pointer, self.reg.a); 2}
@@ -110,6 +117,22 @@ impl Cpu {
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         print!("length of execution {}\n", timing);
+    }
+
+    fn inc(&mut self, val: u8) -> u8 {
+        let (res, carry) = val.overflowing_add(1);
+        if res == 0 {self.reg.setFlag(flags::Z, true)} else {self.reg.setFlag(flags::Z, false)}
+        self.reg.setFlag(flags::N, false);
+        self.reg.setFlag(flags::H, carry);
+        res
+    }
+
+    fn dec(&mut self, val: u8) -> u8 {
+        let (res, carry) = val.overflowing_sub(1);
+        self.reg.setFlag(flags::Z, res == 0);
+        self.reg.setFlag(flags::N, true);
+        self.reg.setFlag(flags::H, carry);
+        res
     }
 
     fn xor(&mut self, val: u8) {

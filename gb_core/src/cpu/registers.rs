@@ -16,7 +16,7 @@ pub mod flags {
     pub const C: u8 = 4;
 }
 
-pub mod registers {
+pub mod reg_code {
     pub const A: u8 = 0;
     pub const B: u8 = 1;
     pub const C: u8 = 2;
