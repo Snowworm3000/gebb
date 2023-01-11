@@ -170,4 +170,12 @@ mod test {
         
         assert_eq!(cpu.rla(0b01010101), 0b10101010);
     }
+
+    #[test]
+    fn rlca() {
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.rlca(0b10101010), 0b01010100);
+        
+        assert_eq!(cpu.rlca(0b01010100), 0b10101001);
+    }
 }
