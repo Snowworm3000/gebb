@@ -1,6 +1,4 @@
 mod registers;
-use std::str::pattern::CharArrayRefSearcher;
-
 use registers::*;
 mod mmu;
 use mmu::*;
@@ -119,6 +117,17 @@ impl Cpu {
         print!("length of execution {}\n", timing);
     }
 
+    fn rla(&mut self, val: u8) -> u8 {
+        self.reg.setFlag(flags::C, (val >> 7) == 1);
+        val.rotate_left(1)
+    }
+
+    fn rlca(&mut self, val: u8) -> u8 {
+        let right_bit = (if self.reg.getFlag(flags::C) {1 as u8} else {0 as u8}) >> 7;
+        self.reg.setFlag(flags::C, (val >> 7) == 1);
+        (val << 1) | right_bit
+    }
+
     fn inc(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_add(1);
         if res == 0 {self.reg.setFlag(flags::Z, true)} else {self.reg.setFlag(flags::Z, false)}
@@ -146,5 +155,19 @@ impl Cpu {
 
     fn jr(&mut self) {
         self.pc = self.pc + (self.fetch_byte() as i8) as u16
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn rla() {
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.rla(0b10101010), 0b01010101);
+        
+        assert_eq!(cpu.rla(0b01010101), 0b10101010);
     }
 }

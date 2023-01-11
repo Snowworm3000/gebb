@@ -16,19 +16,19 @@ pub mod flags {
     pub const C: u8 = 4;
 }
 
-pub mod reg_code {
-    pub const A: u8 = 0;
-    pub const B: u8 = 1;
-    pub const C: u8 = 2;
-    pub const D: u8 = 3;
-    pub const E: u8 = 4;
-    pub const H: u8 = 5;
-    pub const L: u8 = 6;
-    pub const AF: u8 = 7;
-    pub const BC: u8 = 8;
-    pub const DE: u8 = 9;
-    pub const HL: u8 = 10;
-}
+// pub mod reg_code {
+//     pub const A: u8 = 0;
+//     pub const B: u8 = 1;
+//     pub const C: u8 = 2;
+//     pub const D: u8 = 3;
+//     pub const E: u8 = 4;
+//     pub const H: u8 = 5;
+//     pub const L: u8 = 6;
+//     pub const AF: u8 = 7;
+//     pub const BC: u8 = 8;
+//     pub const DE: u8 = 9;
+//     pub const HL: u8 = 10;
+// }
 
 impl Registers{
     pub fn new_empty() -> Registers{
@@ -63,33 +63,33 @@ impl Registers{
         self.l = v as u8;
     }
 
-    pub fn increment(&mut self, register: u8) {
-        self.plus_or_minus(register, true);
-    }
+    // pub fn increment(&mut self, register: u8) {
+    //     self.plus_or_minus(register, true);
+    // }
 
-    pub fn decrement(&mut self, register: u8){
-        self.plus_or_minus(register, false);
-    }
+    // pub fn decrement(&mut self, register: u8){
+    //     self.plus_or_minus(register, false);
+    // }
 
-    fn plus_or_minus(&mut self, register: u8, increment: bool){
-        let add: i16 = if increment {1} else {-1};
-        let add2: i32 = if increment {1} else {-1};
+    // fn plus_or_minus(&mut self, register: u8, increment: bool){
+    //     let add: i16 = if increment {1} else {-1};
+    //     let add2: i32 = if increment {1} else {-1};
 
-        match register {
-            0 => {let mut temp = self.a as i16; temp += add; self.a = temp as u8;}
-            1 => {let mut temp = self.b as i16; temp += add; self.b = temp as u8;}
-            2 => {let mut temp = self.c as i16; temp += add; self.c = temp as u8;}
-            3 => {let mut temp = self.d as i16; temp += add; self.d = temp as u8;}
-            4 => {let mut temp = self.e as i16; temp += add; self.e = temp as u8;}
-            5 => {let mut temp = self.h as i16; temp += add; self.h = temp as u8;}
-            6 => {let mut temp = self.l as i16; temp += add; self.l = temp as u8;}
-            7 => {let mut temp = self.get_af() as i32; temp += add2; self.set_af(temp as u16);}
-            8 => {let mut temp = self.get_bc() as i32; temp += add2; self.set_bc(temp as u16);}
-            9 => {let mut temp = self.get_de() as i32; temp += add2; self.set_de(temp as u16);}
-            10 => {let mut temp = self.get_hl() as i32; temp += add2; self.set_hl(temp as u16);}
-            _ => {unimplemented!("Unimplemented register");}
-        }
-    }
+    //     match register {
+    //         0 => {let mut temp = self.a as i16; temp += add; self.a = temp as u8;}
+    //         1 => {let mut temp = self.b as i16; temp += add; self.b = temp as u8;}
+    //         2 => {let mut temp = self.c as i16; temp += add; self.c = temp as u8;}
+    //         3 => {let mut temp = self.d as i16; temp += add; self.d = temp as u8;}
+    //         4 => {let mut temp = self.e as i16; temp += add; self.e = temp as u8;}
+    //         5 => {let mut temp = self.h as i16; temp += add; self.h = temp as u8;}
+    //         6 => {let mut temp = self.l as i16; temp += add; self.l = temp as u8;}
+    //         7 => {let mut temp = self.get_af() as i32; temp += add2; self.set_af(temp as u16);}
+    //         8 => {let mut temp = self.get_bc() as i32; temp += add2; self.set_bc(temp as u16);}
+    //         9 => {let mut temp = self.get_de() as i32; temp += add2; self.set_de(temp as u16);}
+    //         10 => {let mut temp = self.get_hl() as i32; temp += add2; self.set_hl(temp as u16);}
+    //         _ => {unimplemented!("Unimplemented register");}
+    //     }
+    // }
 
     pub fn getFlag(&self, flag: u8) -> bool {
         let flag = self.f >> flag;
