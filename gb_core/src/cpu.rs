@@ -64,6 +64,7 @@ impl Cpu {
 
     fn execute(&mut self, op: u8) {
         let timing = match op {
+            0x00 => {1}
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 2}
             0x03 => {self.reg.set_bc(self.reg.get_bc().wrapping_add(1)); 2}
@@ -123,8 +124,8 @@ impl Cpu {
     }
 
     fn rlca(&mut self, val: u8) -> u8 {
-        let right_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) >> 7;
-        self.reg.set_flag(flags::C, (val >> 7) == 1);
+        let right_bit = if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8};
+        self.reg.set_flag(flags::C, (val >> 7) == 1);    
         (val << 1) | right_bit
     }
 
@@ -177,5 +178,15 @@ mod test {
         assert_eq!(cpu.rlca(0b10101010), 0b01010100);
         
         assert_eq!(cpu.rlca(0b01010100), 0b10101001);
+    }
+
+    #[test]
+    fn set_flag() {
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
+
+        cpu.reg.set_flag(flags::C, true);
+        assert_eq!(cpu.reg.get_flag(flags::C), true);
+        assert!((0b10101010 >> 7) == 1);
     }
 }
