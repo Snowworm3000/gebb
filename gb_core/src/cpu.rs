@@ -64,6 +64,8 @@ impl Cpu {
 
     fn execute(&mut self, op: u8) {
         let timing = match op {
+            // Notation for LD functions:
+            // LD(to_set, set_with)
             0x00 => {1}
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc() as usize, self.reg.a); 2}
@@ -71,6 +73,7 @@ impl Cpu {
             0x04 => {self.reg.b = self.inc(self.reg.b); 1}
             0x05 => {self.reg.b = self.dec(self.reg.b); 1}
             0x06 => {self.reg.b = self.fetch_byte(); 2}
+            0x07 => {self.reg.a = self.rlca(self.reg.a); 4}
 
             0x0c => {self.reg.c += 1; 1}
             0x0d => {self.reg.c -= 1; 1}
@@ -129,6 +132,18 @@ impl Cpu {
         (val << 1) | right_bit
     }
 
+    fn rra(&mut self, val: u8) -> u8 {
+        println!("and {}", val & 1);
+        self.reg.set_flag(flags::C, (val & 1) == 1);
+        val.rotate_right(1)
+    }
+
+    fn rrca(&mut self, val: u8) -> u8 {
+        let left_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) << 7;
+        self.reg.set_flag(flags::C, (val & 1) == 1);    
+        (val >> 1) | left_bit
+    }
+
     fn inc(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_add(1);
         if res == 0 {self.reg.set_flag(flags::Z, true)} else {self.reg.set_flag(flags::Z, false)}
@@ -168,16 +183,40 @@ mod test {
     fn rla() {
         let mut cpu = Cpu::new();
         assert_eq!(cpu.rla(0b10101010), 0b01010101);
+        assert_eq!(cpu.reg.get_flag(flags::C), true);
         
         assert_eq!(cpu.rla(0b01010101), 0b10101010);
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
     #[test]
     fn rlca() {
         let mut cpu = Cpu::new();
         assert_eq!(cpu.rlca(0b10101010), 0b01010100);
+        assert_eq!(cpu.reg.get_flag(flags::C), true);
         
         assert_eq!(cpu.rlca(0b01010100), 0b10101001);
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
+    }
+
+    #[test]
+    fn rra() {
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.rra(0b10000001), 0b11000000);
+        assert_eq!(cpu.reg.get_flag(flags::C), true);
+        
+        assert_eq!(cpu.rra(0b11000000), 0b01100000);
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
+    }
+
+    #[test]
+    fn rrca() {
+        let mut cpu = Cpu::new();
+        assert_eq!(cpu.rrca(0b10000001), 0b01000000);
+        assert_eq!(cpu.reg.get_flag(flags::C), true);
+        
+        assert_eq!(cpu.rrca(0b01000000), 0b10100000);
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
     #[test]
@@ -187,6 +226,9 @@ mod test {
 
         cpu.reg.set_flag(flags::C, true);
         assert_eq!(cpu.reg.get_flag(flags::C), true);
+
+        cpu.reg.set_flag(flags::C, false);
+        assert_eq!(cpu.reg.get_flag(flags::C), false);
         assert!((0b10101010 >> 7) == 1);
     }
 }

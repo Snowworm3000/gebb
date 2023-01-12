@@ -97,9 +97,7 @@ impl Registers{
     }
 
     pub fn set_flag(&mut self, flag: u8, value: bool) {
-        let num: u8 = if value {0b1} else {0b0};
-        let mask = num << flag;
-        self.f |= mask;
+        self.f = self.f & !(1 << flag) | (u8::from(value) << flag);
     }
 
     
