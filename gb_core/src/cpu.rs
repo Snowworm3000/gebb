@@ -79,7 +79,7 @@ impl Cpu {
             0x0a => {self.reg.a = self.mmu.read_byte(self.reg.get_bc()); 2}
             0x0b => {self.reg.set_bc(self.reg.get_bc().wrapping_sub(1)); 2}
             0x0c => {self.reg.c = self.inc(self.reg.c); 1}
-            0x0d => {self.reg.d = self.dec(self.reg.d); 1}
+            0x0d => {self.reg.c = self.dec(self.reg.c); 1}
             0x0e => {self.reg.c = self.fetch_byte(); 2}
             0x0f => {self.reg.a = self.rrc(self.reg.a); 1}
 
@@ -90,31 +90,45 @@ impl Cpu {
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de(), self.reg.a); 2}
             0x13 => {self.reg.set_de(self.reg.get_de().wrapping_add(1)); 2}
+            0x14 => {self.reg.d = self.inc(self.reg.d); 1}
+            0x15 => {self.reg.d = self.dec(self.reg.d); 1}
+            0x16 => {self.reg.d = self.fetch_byte(); 2}
+            0x17 => {self.reg.a = self.rl(self.reg.a); 1}
 
-            0x1b => {self.reg.set_de(self.reg.get_de().wrapping_sub(1)); 2}
-            0x1c => {self.reg.e += 1; 1}
-            0x1d => {self.reg.e -= 1; 1}
+            0x19 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_de()); self.reg.set_hl(res); 2}
+            0x1a => {self.reg.a = self.mmu.read_byte(self.reg.get_de()); 2}
+            0x1b => {self.reg.set_bc(self.reg.get_de().wrapping_sub(1)); 2}
+            0x1c => {self.reg.e = self.inc(self.reg.e); 1}
+            0x1d => {self.reg.e = self.dec(self.reg.e); 1}
             0x1e => {self.reg.e = self.fetch_byte(); 2}
             
             0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
             0x22 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
             0x23 => {self.reg.set_hl(self.reg.get_hl().wrapping_add(1)); 2}
+            0x24 => {self.reg.h = self.inc(self.reg.h); 1}
+            0x25 => {self.reg.h = self.dec(self.reg.h); 1}
+            0x26 => {self.reg.h = self.fetch_byte(); 2}
 
             0x2b => {self.reg.set_hl(self.reg.get_hl().wrapping_sub(1)); 2}
             0x2c => {self.reg.l += 1; 1}
             0x2d => {self.reg.l -= 1; 1}
             0x2e => {self.reg.l = self.fetch_byte(); 2}
+            0x2f => {self.reg.a = !self.reg.a; self.reg.set_flag(flags::N, true); self.reg.set_flag(flags::H, true); 1}
 
             0x30 => {if !self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
             0x32 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
             0x33 => {self.sp += 1; 2}
+            0x34 => {let v = self.inc(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
+            0x35 => {let v = self.dec(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
+            0x36 => {let v = self.fetch_byte(); self.mmu.write_byte(self.reg.get_hl(), v); 3}
 
             0x3b => {self.sp -= 1; 2}
             0x3c => {self.reg.a += 1; 1}
             0x3d => {self.reg.a -= 1; 1}
             0x3e => {self.reg.a = self.fetch_byte(); 2}
+            0x3f => {self.reg.set_flag(flags::C, !self.reg.get_flag(flags::C)); self.reg.set_flag(flags::N, false); self.reg.set_flag(flags::H, false); 1}
 
             0xaf => {self.xor(self.reg.a); 1}
 
