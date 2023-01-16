@@ -94,13 +94,14 @@ impl Cpu {
             0x15 => {self.reg.d = self.dec(self.reg.d); 1}
             0x16 => {self.reg.d = self.fetch_byte(); 2}
             0x17 => {self.reg.a = self.rl(self.reg.a); 1}
-
+            0x18 => {self.pc = self.fetch_word(); 3}
             0x19 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_de()); self.reg.set_hl(res); 2}
             0x1a => {self.reg.a = self.mmu.read_byte(self.reg.get_de()); 2}
             0x1b => {self.reg.set_bc(self.reg.get_de().wrapping_sub(1)); 2}
             0x1c => {self.reg.e = self.inc(self.reg.e); 1}
             0x1d => {self.reg.e = self.dec(self.reg.e); 1}
             0x1e => {self.reg.e = self.fetch_byte(); 2}
+            0x1f => {self.reg.a = self.rr(self.reg.a); 1}
             
             0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
@@ -153,11 +154,16 @@ impl Cpu {
     fn daa(&mut self, hex: u8) -> u8 {
         let mut high = hex & 0xF0;
         let mut low = hex & 0x0F;
+        self.reg.set_flag(flags::H, false);
         if low > 9 {
             high += low - 9;
             low -= 9;
+            self.reg.set_flag(flags::C, true);
+            self.reg.set_flag(flags::Z, (high & low) == 0);
             return high & low;
         } else {
+            self.reg.set_flag(flags::C, false);
+            self.reg.set_flag(flags::Z, hex == 0);
             return hex;
         }
     }
