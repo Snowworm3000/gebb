@@ -18,19 +18,22 @@ impl MMU {
         self.ram[start..end].copy_from_slice(data);
     }
 
-    pub fn write_byte(&mut self, pointer: usize, data: u8){
-        self.ram[pointer] = data;
+    pub fn write_byte(&mut self, pointer: u16, data: u8){
+        self.ram[pointer as usize] = data;
     }
 
-    pub fn read_pointer(&mut self, pointer: usize) -> u8{ // Read data at pointer location
-        self.ram[pointer]
+    pub fn write_word(&mut self, pointer: u16, data: u16){
+        let data_h = (data >> 8) as u8;
+        let data_l = data as u8;
+        self.ram[pointer as usize] = data_h;
+        self.ram[(pointer as usize) + 1] = data_l;
     }
 
-    pub fn read_byte(&self, loc: usize) -> u8 {
-        self.ram[loc]
+    pub fn read_byte(&self, loc: u16) -> u8 {
+        self.ram[loc as usize]
     }
 
-    pub fn read_word(&self, loc: usize) -> u16 {
+    pub fn read_word(&self, loc: u16) -> u16 {
         self.read_byte(loc) as u16 | ((self.read_byte(loc + 1) as u16) << 8 )
     }
 
