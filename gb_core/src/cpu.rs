@@ -109,6 +109,9 @@ impl Cpu {
             0x24 => {self.reg.h = self.inc(self.reg.h); 1}
             0x25 => {self.reg.h = self.dec(self.reg.h); 1}
             0x26 => {self.reg.h = self.fetch_byte(); 2}
+            0x27 => { // DAA - Decimal adjust accumulator to get a correct BCD representation after an arithmetic instruction.
+                self.reg.a = self.daa(self.reg.a); 1
+            }
 
             0x2b => {self.reg.set_hl(self.reg.get_hl().wrapping_sub(1)); 2}
             0x2c => {self.reg.l += 1; 1}
@@ -145,6 +148,18 @@ impl Cpu {
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         print!("length of execution {}\n", timing);
+    }
+
+    fn daa(&mut self, hex: u8) -> u8 {
+        let mut high = hex & 0xF0;
+        let mut low = hex & 0x0F;
+        if low > 9 {
+            high += low - 9;
+            low -= 9;
+            return high & low;
+        } else {
+            return hex;
+        }
     }
 
     fn add_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
