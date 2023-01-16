@@ -83,9 +83,15 @@ impl Cpu {
             0x0e => {self.reg.c = self.fetch_byte(); 2}
             0x0f => {self.reg.a = self.rrc(self.reg.a); 1}
 
+            0x10 => {
+                // TODO: Implement functionality in game loop
+                todo!("Not implemented")
+            }
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de(), self.reg.a); 2}
+            0x13 => {self.reg.set_de(self.reg.get_de().wrapping_add(1)); 2}
 
+            0x1b => {self.reg.set_de(self.reg.get_de().wrapping_sub(1)); 2}
             0x1c => {self.reg.e += 1; 1}
             0x1d => {self.reg.e -= 1; 1}
             0x1e => {self.reg.e = self.fetch_byte(); 2}
@@ -93,7 +99,9 @@ impl Cpu {
             0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
             0x22 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
+            0x23 => {self.reg.set_hl(self.reg.get_hl().wrapping_add(1)); 2}
 
+            0x2b => {self.reg.set_hl(self.reg.get_hl().wrapping_sub(1)); 2}
             0x2c => {self.reg.l += 1; 1}
             0x2d => {self.reg.l -= 1; 1}
             0x2e => {self.reg.l = self.fetch_byte(); 2}
@@ -101,7 +109,9 @@ impl Cpu {
             0x30 => {if !self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
             0x32 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
+            0x33 => {self.sp += 1; 2}
 
+            0x3b => {self.sp -= 1; 2}
             0x3c => {self.reg.a += 1; 1}
             0x3d => {self.reg.a -= 1; 1}
             0x3e => {self.reg.a = self.fetch_byte(); 2}
