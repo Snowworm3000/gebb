@@ -73,7 +73,7 @@ impl Cpu {
             0x04 => {self.reg.b = self.inc(self.reg.b); 1}
             0x05 => {self.reg.b = self.dec(self.reg.b); 1}
             0x06 => {self.reg.b = self.fetch_byte(); 2}
-            0x07 => {self.reg.a = self.rlca(self.reg.a); 1}
+            0x07 => {self.reg.a = self.rlc(self.reg.a); 1}
             0x08 => {let word = self.fetch_word(); self.mmu.write_word(word, self.sp); 5}
             0x09 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_bc()); self.reg.set_hl(res); 2}
             0x0a => {self.reg.a = self.mmu.read_byte(self.reg.get_bc()); 2}
@@ -81,7 +81,7 @@ impl Cpu {
             0x0c => {self.reg.c = self.inc(self.reg.c); 1}
             0x0d => {self.reg.d = self.dec(self.reg.d); 1}
             0x0e => {self.reg.c = self.fetch_byte(); 2}
-            0x0f => {self.reg.a = self.rrca(self.reg.a); 1}
+            0x0f => {self.reg.a = self.rrc(self.reg.a); 1}
 
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de(), self.reg.a); 2}
@@ -139,24 +139,24 @@ impl Cpu {
         result
     }
 
-    fn rla(&mut self, val: u8) -> u8 {
+    fn rl(&mut self, val: u8) -> u8 {
         self.reg.set_flag(flags::C, (val >> 7) == 1);
         val.rotate_left(1)
     }
 
-    fn rlca(&mut self, val: u8) -> u8 {
+    fn rlc(&mut self, val: u8) -> u8 {
         let right_bit = if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8};
         self.reg.set_flag(flags::C, (val >> 7) == 1);    
         (val << 1) | right_bit
     }
 
-    fn rra(&mut self, val: u8) -> u8 {
+    fn rr(&mut self, val: u8) -> u8 {
         println!("and {}", val & 1);
         self.reg.set_flag(flags::C, (val & 1) == 1);
         val.rotate_right(1)
     }
 
-    fn rrca(&mut self, val: u8) -> u8 {
+    fn rrc(&mut self, val: u8) -> u8 {
         let left_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) << 7;
         self.reg.set_flag(flags::C, (val & 1) == 1);    
         (val >> 1) | left_bit
@@ -198,42 +198,42 @@ mod test {
     use super::*;
 
     #[test]
-    fn rla() {
+    fn rl() {
         let mut cpu = Cpu::new();
-        assert_eq!(cpu.rla(0b10101010), 0b01010101);
+        assert_eq!(cpu.rl(0b10101010), 0b01010101);
         assert_eq!(cpu.reg.get_flag(flags::C), true);
         
-        assert_eq!(cpu.rla(0b01010101), 0b10101010);
+        assert_eq!(cpu.rl(0b01010101), 0b10101010);
         assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
     #[test]
-    fn rlca() {
+    fn rlc() {
         let mut cpu = Cpu::new();
-        assert_eq!(cpu.rlca(0b10101010), 0b01010100);
+        assert_eq!(cpu.rlc(0b10101010), 0b01010100);
         assert_eq!(cpu.reg.get_flag(flags::C), true);
         
-        assert_eq!(cpu.rlca(0b01010100), 0b10101001);
+        assert_eq!(cpu.rlc(0b01010100), 0b10101001);
         assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
     #[test]
-    fn rra() {
+    fn rr() {
         let mut cpu = Cpu::new();
-        assert_eq!(cpu.rra(0b10000001), 0b11000000);
+        assert_eq!(cpu.rr(0b10000001), 0b11000000);
         assert_eq!(cpu.reg.get_flag(flags::C), true);
         
-        assert_eq!(cpu.rra(0b11000000), 0b01100000);
+        assert_eq!(cpu.rr(0b11000000), 0b01100000);
         assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
     #[test]
-    fn rrca() {
+    fn rrc() {
         let mut cpu = Cpu::new();
-        assert_eq!(cpu.rrca(0b10000001), 0b01000000);
+        assert_eq!(cpu.rrc(0b10000001), 0b01000000);
         assert_eq!(cpu.reg.get_flag(flags::C), true);
         
-        assert_eq!(cpu.rrca(0b01000000), 0b10100000);
+        assert_eq!(cpu.rrc(0b01000000), 0b10100000);
         assert_eq!(cpu.reg.get_flag(flags::C), false);
     }
 
