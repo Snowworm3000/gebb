@@ -75,10 +75,13 @@ impl Cpu {
             0x06 => {self.reg.b = self.fetch_byte(); 2}
             0x07 => {self.reg.a = self.rlca(self.reg.a); 1}
             0x08 => {let word = self.fetch_word(); self.mmu.write_word(word, self.sp); 5}
-
-            0x0c => {self.reg.c += 1; 1}
-            0x0d => {self.reg.c -= 1; 1}
+            0x09 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_bc()); self.reg.set_hl(res); 2}
+            0x0a => {self.reg.a = self.mmu.read_byte(self.reg.get_bc()); 2}
+            0x0b => {self.reg.set_bc(self.reg.get_bc().wrapping_sub(1)); 2}
+            0x0c => {self.reg.c = self.inc(self.reg.c); 1}
+            0x0d => {self.reg.d = self.dec(self.reg.d); 1}
             0x0e => {self.reg.c = self.fetch_byte(); 2}
+            0x0f => {self.reg.a = self.rrca(self.reg.a); 1}
 
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de(), self.reg.a); 2}
@@ -118,6 +121,22 @@ impl Cpu {
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         print!("length of execution {}\n", timing);
+    }
+
+    fn add_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
+        let (result, carry) = a.overflowing_add(b);
+        self.reg.set_flag(flags::C, carry);
+        self.reg.set_flag(flags::H ,((self.reg.b & 0xF + self.reg.c & 0xF) & 0xF0) != 0);
+        self.reg.set_flag(flags::N, false);
+        result
+    }
+
+    fn add_word(&mut self, a: u16, b: u16) -> u16 { // TODO: Write tests
+        let (result, carry) = a.overflowing_add(b);
+        self.reg.set_flag(flags::C, carry);
+        self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        self.reg.set_flag(flags::N, false);
+        result
     }
 
     fn rla(&mut self, val: u8) -> u8 {
