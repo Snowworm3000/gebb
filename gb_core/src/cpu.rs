@@ -144,6 +144,11 @@ impl Cpu {
             0x3e => {self.reg.a = self.fetch_byte(); 2}
             0x3f => {self.reg.set_flag(flags::C, !self.reg.get_flag(flags::C)); self.reg.set_flag(flags::N, false); self.reg.set_flag(flags::H, false); 1}
 
+            0x40 => {1} // If you ever feel useless, remember this opcode exists.
+            0x41 => {self.reg.b = self.reg.c; 1}
+
+            0x77 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); 1}
+
             0xaf => {self.xor(self.reg.a); 1}
 
             0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
