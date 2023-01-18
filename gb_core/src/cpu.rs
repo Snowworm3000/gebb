@@ -2,7 +2,8 @@ mod registers;
 use registers::*;
 mod mmu;
 use mmu::*;
-const RAM_SIZE: usize = 0x100;
+const RAM_SIZE: usize = 0x100; // I'm not entirely sure how large this should be yet.
+const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
 const START_ADDR: usize = 0x0;
 
 pub struct Cpu {
@@ -10,6 +11,7 @@ pub struct Cpu {
     // ram: [u8; RAM_SIZE],
     pc: u16,
     sp: u16,
+    stack: [u16; STACK_SIZE],
     mmu: MMU
 }
 
@@ -20,6 +22,7 @@ impl Cpu {
             // ram: [0; RAM_SIZE],
             pc: 0,
             sp: 0,
+            stack: [0; STACK_SIZE],
             mmu: MMU::new()
         }
     }
@@ -28,6 +31,7 @@ impl Cpu {
         // self.ram = [0; RAM_SIZE];
         self.pc = 0;
         self.sp = 0;
+        self.stack = [0; STACK_SIZE];
         self.mmu.reset();
     }
 
@@ -151,7 +155,28 @@ impl Cpu {
 
             0xaf => {self.xor(self.reg.a); 1}
 
+            0xc0 => {if !self.reg.get_flag(flags::Z) {self.ret(); 5} else {2}}
+            0xc1 => {let v = self.pop(); self.reg.set_bc(v); 3}
+            0xc2 => {if !self.reg.get_flag(flags::Z) {self.pc = self.fetch_word(); 4} else {3}}
+            0xc3 => {self.pc = self.fetch_word(); 4}
+            0xc4 => {if !self.reg.get_flag(flags::Z) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xc5 => {self.push(self.reg.get_bc()); 4}
+            0xc6 => {let v = self.fetch_byte(); self.reg.a = self.add_byte(self.reg.a, v); 2}
+            0xc7 => {self.call(0x00); 4}
+            0xc8 => {if self.reg.get_flag(flags::Z) {self.ret(); 5} else {2}}
+            0xc9 => {self.ret(); 4}
+            0xca => {if self.reg.get_flag(flags::Z) {self.jr(); 4} else {3}}
+            
+            0xcc => {if self.reg.get_flag(flags::Z) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xcd => {let p = self.fetch_word(); self.call(p); 6}
+            0xce => {let v = self.fetch_byte(); self.adc(v); 2}
+            0xcf => {self.call(0x08); 4}
+
+            0xd0 => {if !self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
+            
+
             0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
+            
 
             0xcb => {
                 let op = self.fetch_byte();
@@ -164,6 +189,16 @@ impl Cpu {
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         print!("length of execution {}\n", timing);
+    }
+
+    fn adc(&mut self, val: u8) {
+        let orig = self.reg.a;
+        self.reg.a = self.reg.a + val + if self.reg.get_flag(flags::C) {1} else {0};
+        self.reg.set_flag(flags::Z, self.reg.a == 0);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, ((orig >> 3) & 0b1) != ((self.reg.a >> 3) & 0b1));
+        self.reg.set_flag(flags::C, ((orig >> 7) & 0b1) != ((self.reg.a >> 7) & 0b1));
+
     }
 
     fn daa(&mut self, hex: u8) -> u8 {
@@ -249,6 +284,26 @@ impl Cpu {
 
     fn jr(&mut self) {
         self.pc = self.pc + (self.fetch_byte() as i8) as u16
+    }
+
+    fn ret(&mut self) {
+        self.pc = self.stack[self.sp as usize];
+        self.sp -= 1;
+    }
+
+    fn call(&mut self, pointer: u16) {
+        self.push(self.pc);
+        self.pc = pointer;
+    }
+
+    fn push(&mut self, val: u16) {
+        self.stack[self.sp as usize] = val;
+        self.sp += 1;
+    }
+
+    fn pop(&mut self) -> u16 { // TODO: Checks might need to be made here.
+        self.sp -= 1;
+        self.stack[self.sp as usize]
     }
 }
 
