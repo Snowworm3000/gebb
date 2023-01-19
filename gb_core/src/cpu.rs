@@ -191,10 +191,20 @@ impl Cpu {
             0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
             0xdf => {self.call(0x18); 4}
 
-            
-            
-
+            0xe0 => {let v = self.fetch_byte() as u16; self.mmu.write_byte(self.mmu.read_byte(0xff00 + v) as u16, self.reg.a); 3}
+            0xe1 => {let v = self.pop(); self.reg.set_hl(v); 3}
             0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
+
+            0xe5 => {self.push(self.reg.get_hl()); 4}
+            0xe6 => {let v = self.fetch_byte(); self.reg.a = self.or(self.reg.a, v); 2}
+            0xe7 => {self.call(0x20); 4}
+            0xe8 => {let v = self.fetch_word(); self.add_word_z(self.sp, v); 4}
+            0xe9 => {self.pc = self.reg.get_hl(); 1}
+            0xea => {let pointer = self.fetch_word(); self.mmu.write_byte(pointer, self.reg.a); 4}
+
+            0xee => {let v = self.fetch_byte(); self.reg.a = self.xor(self.reg.a, v); 2}
+            0xef => {self.call(0x28); 4}
+
             
 
             0xcb => {
@@ -261,6 +271,42 @@ impl Cpu {
         self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
         self.reg.set_flag(flags::N, false);
         result
+    }
+
+    fn add_word_z(&mut self, a: u16, b: u16) -> u16 { // It would be good if rust had an easy way to provide optional parameters for this case https://stackoverflow.com/questions/24047686/default-function-arguments-in-rust
+        let (result, carry) = a.overflowing_add(b);
+        self.reg.set_flag(flags::C, carry);
+        self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::Z, false);
+        result
+    }
+
+    fn and(&mut self, a: u8, b: u8) -> u8 {
+        let res = a & b;
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, true);
+        self.reg.set_flag(flags::C, false);
+        res 
+    }
+
+    fn or(&mut self, a: u8, b: u8) -> u8 {
+        let res = a | b;
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, false);
+        self.reg.set_flag(flags::C, false);
+        res 
+    }
+
+    fn xor(&mut self, a: u8, b: u8) -> u8 {
+        let res = a ^ b;
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, false);
+        self.reg.set_flag(flags::C, false);
+        res 
     }
 
     fn sub_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
