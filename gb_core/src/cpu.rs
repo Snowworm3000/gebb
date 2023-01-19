@@ -196,16 +196,45 @@ impl Cpu {
             0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
 
             0xe5 => {self.push(self.reg.get_hl()); 4}
-            0xe6 => {let v = self.fetch_byte(); self.reg.a = self.or(self.reg.a, v); 2}
+            0xe6 => {let v = self.fetch_byte(); self.and(v); 2}
             0xe7 => {self.call(0x20); 4}
             0xe8 => {let v = self.fetch_word(); self.add_word_z(self.sp, v); 4}
             0xe9 => {self.pc = self.reg.get_hl(); 1}
             0xea => {let pointer = self.fetch_word(); self.mmu.write_byte(pointer, self.reg.a); 4}
 
-            0xee => {let v = self.fetch_byte(); self.reg.a = self.xor(self.reg.a, v); 2}
+            0xee => {let v = self.fetch_byte(); self.xor(v); 2}
             0xef => {self.call(0x28); 4}
 
+            0xf0 => {let v = self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 3}
+            0xf1 => { // This pop is slightly different.
+                let v = self.pop(); self.reg.set_af(v); 
+                self.reg.set_flag(flags::Z, (v >> 6) & 0b1 == 1);
+                self.reg.set_flag(flags::N, (v >> 5) & 0b1 == 1);
+                self.reg.set_flag(flags::H, (v >> 4) & 0b1 == 1);
+                self.reg.set_flag(flags::C, (v >> 3) & 0b1 == 1);
+                3
+            }
+            0xf2 => {let v = self.reg.c as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 2}
+            0xf3 => {self.di(); 1}
             
+            0xf5 => {self.push(self.reg.get_af()); 4}
+            0xf6 => {let v = self.fetch_byte(); self.or(v); 2}
+            0xf7 => {self.call(0x30); 4}
+            0xf8 => {
+                let v = (self.fetch_word() as i8) as u16; 
+                self.reg.set_hl(self.sp + v as u16); 
+                self.reg.set_flag(flags::Z, false);
+                self.reg.set_flag(flags::N, false);
+                self.reg.set_flag(flags::H, (((self.sp >> 3) & 0b1) & (v >> 3) & 0b1) == 1);
+                self.reg.set_flag(flags::C, (((self.sp >> 7) & 0b1) & (v >> 7) & 0b1) == 1);
+                3
+            }
+            0xf9 => {self.sp = self.reg.get_hl(); 2}
+            0xfa => {let pointer = self.fetch_word(); self.reg.a = self.mmu.read_byte(pointer); 4}
+            0xfb => {self.ei(); 1}
+
+            0xfe => {let v = self.fetch_byte(); self.cp(v); 2}
+            0xff => {self.call(0x38); 4}
 
             0xcb => {
                 let op = self.fetch_byte();
@@ -257,6 +286,10 @@ impl Cpu {
         }
     }
 
+    fn cp(&mut self, val: u8) {
+        self.reg.a = self.sub_byte(self.reg.a, val);
+    }
+
     fn add_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
         let (result, carry) = a.overflowing_add(b);
         self.reg.set_flag(flags::C, carry);
@@ -282,31 +315,31 @@ impl Cpu {
         result
     }
 
-    fn and(&mut self, a: u8, b: u8) -> u8 {
-        let res = a & b;
+    fn and(&mut self, val: u8) {
+        let res = self.reg.a & val;
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, false);
         self.reg.set_flag(flags::H, true);
         self.reg.set_flag(flags::C, false);
-        res 
+        self.reg.a = res;
     }
 
-    fn or(&mut self, a: u8, b: u8) -> u8 {
-        let res = a | b;
+    fn or(&mut self, val: u8) {
+        let res = self.reg.a | val;
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, false);
         self.reg.set_flag(flags::H, false);
         self.reg.set_flag(flags::C, false);
-        res 
+        self.reg.a = res; 
     }
 
-    fn xor(&mut self, a: u8, b: u8) -> u8 {
-        let res = a ^ b;
+    fn xor(&mut self, val: u8) {
+        let res = self.reg.a ^ val;
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, false);
         self.reg.set_flag(flags::H, false);
         self.reg.set_flag(flags::C, false);
-        res 
+        self.reg.a = res;
     }
 
     fn sub_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
@@ -364,10 +397,6 @@ impl Cpu {
         res
     }
 
-    fn xor(&mut self, val: u8) {
-        self.reg.a |= val; 
-    }
-
     fn bit(&mut self, pos: u8, reg: u8){ // TODO: Less unnecessary casting could improve performance
         let bit = if (reg >> pos) == 1 {true} else {false};
         self.reg.set_flag(pos, bit);
@@ -384,6 +413,9 @@ impl Cpu {
 
     fn ei(&mut self) {
         self.ime = true;
+    }
+    fn di(&mut self) {
+        self.ime = false;
     }
 
     fn reti(&mut self) {
