@@ -11,6 +11,7 @@ pub struct Cpu {
     // ram: [u8; RAM_SIZE],
     pc: u16,
     sp: u16,
+    ime: bool,
     stack: [u16; STACK_SIZE],
     mmu: MMU
 }
@@ -22,6 +23,7 @@ impl Cpu {
             // ram: [0; RAM_SIZE],
             pc: 0,
             sp: 0,
+            ime: false,
             stack: [0; STACK_SIZE],
             mmu: MMU::new()
         }
@@ -31,6 +33,7 @@ impl Cpu {
         // self.ram = [0; RAM_SIZE];
         self.pc = 0;
         self.sp = 0;
+        self.ime = false;
         self.stack = [0; STACK_SIZE];
         self.mmu.reset();
     }
@@ -173,6 +176,22 @@ impl Cpu {
             0xcf => {self.call(0x08); 4}
 
             0xd0 => {if !self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
+            0xd1 => {let v = self.pop(); self.reg.set_de(v); 3}
+            0xd2 => {if !self.reg.get_flag(flags::C) {self.pc = self.fetch_word(); 4} else {3}}
+            0xd4 => {if !self.reg.get_flag(flags::C) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xd5 => {self.push(self.reg.get_de()); 4}
+            0xd6 => {let v = self.fetch_byte(); self.reg.a = self.sub_byte(self.reg.a, v); 2}
+            0xd7 => {self.call(0x10); 4}
+            0xd8 => {if self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
+            0xd9 => {self.reti(); 4}
+            0xda => {if self.reg.get_flag(flags::C) {self.jr(); 4} else {3}}
+
+            0xdc => {if self.reg.get_flag(flags::C) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+
+            0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
+            0xdf => {self.call(0x18); 4}
+
+            
             
 
             0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
@@ -199,6 +218,16 @@ impl Cpu {
         self.reg.set_flag(flags::H, ((orig >> 3) & 0b1) != ((self.reg.a >> 3) & 0b1));
         self.reg.set_flag(flags::C, ((orig >> 7) & 0b1) != ((self.reg.a >> 7) & 0b1));
 
+    }
+
+    fn sbc(&mut self, val: u8) {
+        let orig = self.reg.a;
+        let carry = if self.reg.get_flag(flags::C) {1} else {0};
+        self.reg.a = self.reg.a - val - carry;
+        self.reg.set_flag(flags::Z, self.reg.a == 0);
+        self.reg.set_flag(flags::N, true);
+        self.reg.set_flag(flags::H, ((orig >> 3) & 0b1) != ((self.reg.a >> 3) & 0b1));
+        self.reg.set_flag(flags::C, (val + carry) > orig);
     }
 
     fn daa(&mut self, hex: u8) -> u8 {
@@ -231,6 +260,22 @@ impl Cpu {
         self.reg.set_flag(flags::C, carry);
         self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
         self.reg.set_flag(flags::N, false);
+        result
+    }
+
+    fn sub_byte(&mut self, a: u8, b: u8) -> u8 { // TODO: Write tests
+        let (result, carry) = a.overflowing_sub(b);
+        self.reg.set_flag(flags::C, carry);
+        self.reg.set_flag(flags::H ,((self.reg.b & 0xF + self.reg.c & 0xF) & 0xF0) != 0);
+        self.reg.set_flag(flags::N, true);
+        result
+    }
+
+    fn sub_word(&mut self, a: u16, b: u16) -> u16 { // TODO: Write tests
+        let (result, carry) = a.overflowing_add(b);
+        self.reg.set_flag(flags::C, carry);
+        self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        self.reg.set_flag(flags::N, true);
         result
     }
 
@@ -289,6 +334,15 @@ impl Cpu {
     fn ret(&mut self) {
         self.pc = self.stack[self.sp as usize];
         self.sp -= 1;
+    }
+
+    fn ei(&mut self) {
+        self.ime = true;
+    }
+
+    fn reti(&mut self) {
+        self.ei();
+        self.ret();
     }
 
     fn call(&mut self, pointer: u16) {
