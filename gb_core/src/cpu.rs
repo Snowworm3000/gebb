@@ -153,6 +153,20 @@ impl Cpu {
 
             0x40 => {1} // If you ever feel useless, remember this opcode exists.
             0x41 => {self.reg.b = self.reg.c; 1}
+            0x42 => {self.reg.b = self.reg.d; 1}
+            0x43 => {self.reg.b = self.reg.e; 1}
+            0x44 => {self.reg.b = self.reg.h; 1}
+            0x45 => {self.reg.b = self.reg.l; 1}
+            0x46 => {self.reg.b = self.mmu.read_byte(self.reg.get_hl()); 2}
+            0x47 => {self.reg.b = self.reg.a; 1}
+            0x48 => {self.reg.c = self.reg.b; 1}
+            0x49 => {1}
+            0x4a => {self.reg.c = self.reg.d; 1}
+            0x4b => {self.reg.c = self.reg.e; 1}
+            0x4c => {self.reg.c = self.reg.h; 1}
+            0x4d => {self.reg.c = self.reg.l; 1}
+            0x4e => {self.reg.c = self.mmu.read_byte(self.reg.get_hl()); 2}
+            0x4f => {self.reg.c = self.reg.a; 1}
 
             0x77 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); 1}
 
