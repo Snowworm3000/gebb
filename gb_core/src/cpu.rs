@@ -1,4 +1,5 @@
 mod registers;
+use core::panic;
 use std::ops::Shl;
 
 use registers::*;
@@ -256,6 +257,30 @@ impl Cpu {
                 let op = self.fetch_byte();
                 let timing = match op {
                     0x7c => {self.bit(7, self.reg.h); 2}
+
+                    0xc0..=0xff => { // Implement range of opcodes from c0 to ff (they're all set instructions)
+                        // TODO: This might be really messy code, see if there is a way to improve it.
+
+                        let params = op - 0xc0;
+                        let first_param = params / 8;
+                        let hl = self.reg.get_hl(); // Optimisation here by only fetching hl when the instruction requires it.
+                       
+                        println!("{:#04x} to set {} ", params, first_param);
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            unimplemented!("This might not work");
+                        }
+
+                        let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &self.mmu.read_byte(hl), &self.reg.a];
+                        let position = (params % 8) as usize;
+
+                        let second_param_final = *second_param[position];
+                        let value = self.set(first_param, second_param_final);
+
+                        let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut self.mmu.read_byte(hl), &mut self.reg.a];
+                        *second_param_mut[position] = value; // TODO: Check cases where hl is set, this probable won't work.
+
+                        2 // TODO: change to four when fetching (HL)
+                    }
                     _ => unimplemented!("Unimplemented CB prefixed opcode: {:#04x}", op)
                 };
                 timing + 1
@@ -490,11 +515,11 @@ impl Cpu {
         self.reg.set_flag(flags::H, true);
     }
 
-    fn res(&mut self, position: u8, val: u8) -> u8 { // TODO: Write unit test for this
+    fn res(&self, position: u8, val: u8) -> u8 { // TODO: Write unit test for this
         val & !(1 << position) | (u8::from(0) << position)
     }
 
-    fn set (&mut self, position: u8, val: u8) -> u8 {
+    fn set (&self, position: u8, val: u8) -> u8 {
         val & !(1 << position) | (u8::from(1) << position)
     }
 
@@ -556,5 +581,21 @@ mod test {
         cpu.reg.set_flag(flags::C, false);
         assert_eq!(cpu.reg.get_flag(flags::C), false);
         assert!((0b10101010 >> 7) == 1);
+    }
+
+    #[test]
+    fn set() {
+        let mut cpu = Cpu::new();
+        cpu.mmu.write_byte(cpu.pc, 0xc0);
+        cpu.execute(0xcb);
+        assert_eq!(cpu.reg.b, 0b1);
+    }
+
+    #[test]
+    fn set2() {
+        let mut cpu = Cpu::new();
+        cpu.mmu.write_byte(cpu.pc, 0xe1);
+        cpu.execute(0xcb);
+        assert_eq!(cpu.reg.c, 0b10000);
     }
 }
