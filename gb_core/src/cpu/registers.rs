@@ -99,6 +99,10 @@ impl Registers{
     pub fn set_flag(&mut self, flag: u8, value: bool) {
         self.f = self.f & !(1 << flag) | (u8::from(value) << flag);
     }
+    
+    pub fn unset_flags(&mut self) { // TODO: Refactor code to use this when possible.
+        self.f = 0;
+    }
 
     
 }

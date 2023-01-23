@@ -1,4 +1,6 @@
 mod registers;
+use std::ops::Shl;
+
 use registers::*;
 mod mmu;
 use mmu::*;
@@ -411,11 +413,6 @@ impl Cpu {
         res
     }
 
-    fn bit(&mut self, pos: u8, reg: u8){ // TODO: Less unnecessary casting could improve performance
-        let bit = if (reg >> pos) == 1 {true} else {false};
-        self.reg.set_flag(pos, bit);
-    }
-
     fn jr(&mut self) {
         self.pc = self.pc + (self.fetch_byte() as i8) as u16
     }
@@ -451,6 +448,56 @@ impl Cpu {
         self.sp -= 1;
         self.stack[self.sp as usize]
     }
+
+    fn sla(&mut self, val: u8) -> u8 { // Shift left arithmetically
+        let res = val << 1;
+        let carry = (val >> 7) == 1;
+        self.reg.unset_flags();
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::C, carry);
+        res
+    }
+
+    fn sra(&mut self, val: u8) -> u8 { // Shift right arithmetically
+        let msb = val >> 7; // Most significant bit
+        let res = (val >> 1) & msb;
+        let carry = (val & 0b1) == 1;
+        self.reg.unset_flags();
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::C, carry);
+        res
+    }
+
+    fn srl(&mut self, val: u8) -> u8 { // Shift right logically
+        let res = val >> 1;
+        let carry = (val & 0b1) == 1;
+        self.reg.unset_flags();
+        self.reg.set_flag(flags::Z, res == 0);
+        self.reg.set_flag(flags::C, carry);
+        res
+    }
+
+    fn swap(&mut self, val: u8) -> u8 {
+        let lth = (val & 0x0F) << 4; // Lower bit to higher bit
+        let htl = val >> 4; 
+        lth | htl
+    }
+
+    fn bit(&mut self, position: u8, val: u8) {
+        let bit = (val >> position) & 0b1;
+        self.reg.set_flag(flags::Z, bit == 1);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::H, true);
+    }
+
+    fn res(&mut self, position: u8, val: u8) -> u8 { // TODO: Write unit test for this
+        val & !(1 << position) | (u8::from(0) << position)
+    }
+
+    fn set (&mut self, position: u8, val: u8) -> u8 {
+        val & !(1 << position) | (u8::from(1) << position)
+    }
+
 }
 
 
