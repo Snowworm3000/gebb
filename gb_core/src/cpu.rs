@@ -1,6 +1,7 @@
 mod registers;
 use core::panic;
 use std::ops::Shl;
+use std::str;
 
 use registers::*;
 mod mmu;
@@ -73,6 +74,14 @@ impl Cpu {
     }
 
     fn execute(&mut self, op: u8) {
+        if (self.mmu.read_byte(0xff02) == 0x81) {
+            let c = self.mmu.read_byte(0xff01);
+            if let Ok(s) = str::from_utf8(&[c]) {
+                println!("{}", s);
+            }
+            self.mmu.write_byte(0xff02, 0x0);
+        }
+        println!("Flags: {:#04x} Opcode: {:#04x} PC: {:#04x} Registers: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", self.reg.f, op, self.pc, self.reg.a, self.reg.b, self.reg.c, self.reg.d, self.reg.e, self.reg.f, self.reg.h, self.reg.l);
         let timing = match op {
             // Notation for LD functions:
             // LD(to_set, set_with)
@@ -127,8 +136,8 @@ impl Cpu {
             0x29 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_hl()); self.reg.set_hl(res); 2}
             0x2a => {self.reg.a = self.mmu.read_byte(self.reg.get_hl() + 1); 2}
             0x2b => {self.reg.set_hl(self.reg.get_hl().wrapping_sub(1)); 2}
-            0x2c => {self.reg.l += 1; 1}
-            0x2d => {self.reg.l -= 1; 1}
+            0x2c => {self.reg.l = self.inc(self.reg.l); 1}
+            0x2d => {self.reg.l = self.dec(self.reg.l); 1}
             0x2e => {self.reg.l = self.fetch_byte(); 2}
             0x2f => {self.reg.a = !self.reg.a; self.reg.set_flag(flags::N, true); self.reg.set_flag(flags::H, true); 1}
 
@@ -149,8 +158,8 @@ impl Cpu {
             0x39 => {let res = self.add_word(self.reg.get_hl(), self.sp); self.reg.set_hl(res); 2}
             0x3a => {self.reg.a = self.mmu.read_byte(self.reg.get_hl() - 1); 2}
             0x3b => {self.sp -= 1; 2}
-            0x3c => {self.reg.a += 1; 1}
-            0x3d => {self.reg.a -= 1; 1}
+            0x3c => {self.reg.a = self.inc(self.reg.a); 1}
+            0x3d => {self.reg.a = self.dec(self.reg.a); 1}
             0x3e => {self.reg.a = self.fetch_byte(); 2}
             0x3f => {self.reg.set_flag(flags::C, !self.reg.get_flag(flags::C)); self.reg.set_flag(flags::N, false); self.reg.set_flag(flags::H, false); 1}
 
@@ -171,9 +180,7 @@ impl Cpu {
             0x4e => {self.reg.c = self.mmu.read_byte(self.reg.get_hl()); 2}
             0x4f => {self.reg.c = self.reg.a; 1}
 
-            0x77 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); 1}
-
-            0xaf => {self.xor(self.reg.a); 1}
+            
 
             0xc0 => {if !self.reg.get_flag(flags::Z) {self.ret(); 5} else {2}}
             0xc1 => {let v = self.pop(); self.reg.set_bc(v); 3}
@@ -256,30 +263,142 @@ impl Cpu {
             0xcb => {
                 let op = self.fetch_byte();
                 let timing = match op {
-                    0x7c => {self.bit(7, self.reg.h); 2}
+                    0x00..=0x0f => {
+                        let params = op - 0xc0;
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            let value = self.rlc(self.mmu.read_byte(self.reg.get_hl()));
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.rlc(second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
+                        }
+                    }
+                    0x10..=0x1f => {
+                        let params = op - 0xc0;
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            let value = self.rl(self.mmu.read_byte(self.reg.get_hl()));
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.rl(second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
+                        }
+                    }
+                    0x20..=0x2f => {
+                        let params = op - 0xc0;
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            let value = self.sla(self.mmu.read_byte(self.reg.get_hl()));
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.sla(second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
+                        }
+                    }
+                    0x30..=0x3f => {
+                        let params = op - 0xc0;
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            let value = self.swap(self.mmu.read_byte(self.reg.get_hl()));
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.swap(second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
+                        }
+                    }
+                    0x40..=0x7f => { // TODO: All of this code is copied straight from the block below, remember to change this when fixes are made.
+                        let params = op - 0xc0;
+                        let first_param = params / 8;
+                       
+                        // println!("{:#04x} to set {} ", params, first_param);
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            self.bit(first_param, self.mmu.read_byte(self.reg.get_hl()));
+                            3
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            self.bit(first_param, second_param_final);
+                            2
+                        }
+                    }
+
+                    0x80..=0xbf => { // TODO: All of this code is copied straight from the block below, remember to change this when fixes are made.
+                        let params = op - 0xc0;
+                        let first_param = params / 8;
+                       
+                        // println!("{:#04x} to set {} ", params, first_param);
+                        if (params % 8) == 6 || (params % 8) == 0xe {
+                            let value = self.res(first_param, self.mmu.read_byte(self.reg.get_hl()));
+                            println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.res(first_param, second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
+                        }
+                    }
 
                     0xc0..=0xff => { // Implement range of opcodes from c0 to ff (they're all set instructions)
                         // TODO: This might be really messy code, see if there is a way to improve it.
 
                         let params = op - 0xc0;
                         let first_param = params / 8;
-                        let hl = self.reg.get_hl(); // Optimisation here by only fetching hl when the instruction requires it.
                        
-                        println!("{:#04x} to set {} ", params, first_param);
+                        // println!("{:#04x} to set {} ", params, first_param);
                         if (params % 8) == 6 || (params % 8) == 0xe {
-                            unimplemented!("This might not work");
+                            let value = self.set(first_param, self.mmu.read_byte(self.reg.get_hl()));
+                            println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
+                            self.mmu.write_byte(self.reg.get_hl(), value);
+                            4
+                        } else {
+                            let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
+                            let position = (params % 8) as usize;
+    
+                            let second_param_final = *second_param[position];
+                            let value = self.set(first_param, second_param_final);
+    
+                            let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
+                            *second_param_mut[position] = value; 
+                            2
                         }
-
-                        let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &self.mmu.read_byte(hl), &self.reg.a];
-                        let position = (params % 8) as usize;
-
-                        let second_param_final = *second_param[position];
-                        let value = self.set(first_param, second_param_final);
-
-                        let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut self.mmu.read_byte(hl), &mut self.reg.a];
-                        *second_param_mut[position] = value; // TODO: Check cases where hl is set, this probable won't work.
-
-                        2 // TODO: change to four when fetching (HL)
                     }
                     _ => unimplemented!("Unimplemented CB prefixed opcode: {:#04x}", op)
                 };
@@ -443,8 +562,10 @@ impl Cpu {
     }
 
     fn ret(&mut self) {
-        self.pc = self.stack[self.sp as usize];
-        self.sp -= 1;
+        // self.pc = self.stack[self.sp as usize];
+        // self.sp -= 1;
+        self.pc = self.mmu.read_word(self.sp);
+        self.sp += 2;
     }
 
     fn ei(&mut self) {
@@ -598,4 +719,16 @@ mod test {
         cpu.execute(0xcb);
         assert_eq!(cpu.reg.c, 0b10000);
     }
+
+    #[test]
+    fn set3() {
+        let mut cpu = Cpu::new();
+        cpu.reg.set_hl(0xff);
+        cpu.mmu.write_byte(cpu.pc, 0xc6);
+        
+        cpu.execute(0xcb);
+        assert_eq!(cpu.mmu.read_byte(cpu.reg.get_hl()), 0b1);
+    }
+
+
 }
