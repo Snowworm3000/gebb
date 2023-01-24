@@ -25,7 +25,7 @@ impl Cpu {
         Self {
             reg: Registers::new_empty(),
             // ram: [0; RAM_SIZE],
-            pc: 0,
+            pc: 0x100,
             sp: 0,
             ime: false,
             stack: [0; STACK_SIZE],
@@ -35,7 +35,7 @@ impl Cpu {
     pub fn reset(&mut self) {
         self.reg = Registers::new_empty();
         // self.ram = [0; RAM_SIZE];
-        self.pc = 0;
+        self.pc = 0x100;
         self.sp = 0;
         self.ime = false;
         self.stack = [0; STACK_SIZE];
@@ -124,7 +124,7 @@ impl Cpu {
             
             0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
-            0x22 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() + 1); 2}
+            0x22 => {self.mmu.write_byte(self.reg.get_hl() + 1, self.reg.a); 2}
             0x23 => {self.reg.set_hl(self.reg.get_hl().wrapping_add(1)); 2}
             0x24 => {self.reg.h = self.inc(self.reg.h); 1}
             0x25 => {self.reg.h = self.dec(self.reg.h); 1}
@@ -143,7 +143,7 @@ impl Cpu {
 
             0x30 => {if !self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
-            0x32 => {self.mmu.write_byte(self.reg.get_hl(), self.reg.a); self.reg.set_hl(self.reg.get_hl() - 1); 2}
+            0x32 => {self.mmu.write_byte(self.reg.get_hl() - 1, self.reg.a); 2}
             0x33 => {self.sp += 1; 2}
             0x34 => {let v = self.inc(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
             0x35 => {let v = self.dec(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
@@ -735,13 +735,13 @@ impl Cpu {
     }
 
     fn push(&mut self, val: u16) {
-        self.stack[self.sp as usize] = val;
-        self.sp += 1;
+        self.sp = self.sp - 2;
+        self.mmu.write_word(self.sp, val);
     }
 
     fn pop(&mut self) -> u16 { // TODO: Checks might need to be made here.
-        self.sp -= 1;
-        self.stack[self.sp as usize]
+        self.sp = self.sp + 2;
+        self.mmu.read_word(self.sp - 2) // rr = popped value
     }
 
     fn sla(&mut self, val: u8) -> u8 { // Shift left arithmetically
