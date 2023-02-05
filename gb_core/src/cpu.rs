@@ -17,26 +17,28 @@ pub struct Cpu {
     sp: u16,
     ime: bool,
     stack: [u16; STACK_SIZE],
-    mmu: MMU
+    mmu: MMU,
+    depth: u8,
 }
 
 impl Cpu {
     pub fn new() -> Self {
         Self {
-            reg: Registers::new_empty(),
+            reg: Registers::new_default(),
             // ram: [0; RAM_SIZE],
             pc: 0x100,
-            sp: 0,
+            sp: 0xfffe,
             ime: false,
             stack: [0; STACK_SIZE],
-            mmu: MMU::new()
+            mmu: MMU::new(),
+            depth: 0,
         }
     }
     pub fn reset(&mut self) {
-        self.reg = Registers::new_empty();
+        self.reg = Registers::new_default();
         // self.ram = [0; RAM_SIZE];
         self.pc = 0x100;
-        self.sp = 0;
+        self.sp = 0xfffe;
         self.ime = false;
         self.stack = [0; STACK_SIZE];
         self.mmu.reset();
@@ -81,11 +83,18 @@ impl Cpu {
             }
             self.mmu.write_byte(0xff02, 0x0);
         }
-        println!("Flags: {:#04x} Opcode: {:#04x} PC: {:#04x} Registers: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", self.reg.f, op, self.pc, self.reg.a, self.reg.b, self.reg.c, self.reg.d, self.reg.e, self.reg.f, self.reg.h, self.reg.l);
+        // println!("Flags: {:#04x} Opcode: {:#04x} PC: {:#04x} Registers: {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", self.reg.f, op, self.pc, self.reg.a, self.reg.b, self.reg.c, self.reg.d, self.reg.e, self.reg.f, self.reg.h, self.reg.l);
+        // println!("Flags: {:#04x} Opcode: {:#04x} PC: {:#04x} SP: {:#04x} Registers: af {:#04x} bc {:#04x} de {:#04x} hl {:#04x}", self.reg.f, op, self.pc, self.sp, self.reg.get_af(), self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl());
+        let flz = if self.reg.get_flag(flags::Z) {"Z"} else {"-"};
+        let fln = if self.reg.get_flag(flags::N) {"N"} else {"-"};
+        let flh = if self.reg.get_flag(flags::H) {"H"} else {"-"};
+        let flc = if self.reg.get_flag(flags::C) {"C"} else {"-"};
+        println!("{}", self.mmu.read_word(self.sp));
+        println!("A: {:#04x} F: {flz}{fln}{flh}{flc} BC {:#04x} DE {:#04x} HL {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
         let timing = match op {
             // Notation for LD functions:
             // LD(to_set, set_with)
-            0x00 => {1}
+            0x00 => {if self.depth > 100 {unimplemented!("Stop")} else {self.depth += 1;1}}
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc(), self.reg.a); 2}
             0x03 => {self.reg.set_bc(self.reg.get_bc().wrapping_add(1)); 2}
@@ -333,7 +342,7 @@ impl Cpu {
             0xc1 => {let v = self.pop(); self.reg.set_bc(v); 3}
             0xc2 => {if !self.reg.get_flag(flags::Z) {self.pc = self.fetch_word(); 4} else {3}}
             0xc3 => {self.pc = self.fetch_word(); 4}
-            0xc4 => {if !self.reg.get_flag(flags::Z) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xc4 => {if !self.reg.get_flag(flags::Z) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
             0xc5 => {self.push(self.reg.get_bc()); 4}
             0xc6 => {let v = self.fetch_byte(); self.reg.a = self.add_byte(self.reg.a, v); 2}
             0xc7 => {self.call(0x00); 4}
@@ -341,15 +350,15 @@ impl Cpu {
             0xc9 => {self.ret(); 4}
             0xca => {if self.reg.get_flag(flags::Z) {self.jr(); 4} else {3}}
             
-            0xcc => {if self.reg.get_flag(flags::Z) {let p = self.fetch_word(); self.call(p); 6} else {3}}
-            0xcd => {let p = self.fetch_word(); self.call(p); 6}
+            0xcc => {if self.reg.get_flag(flags::Z) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
+            0xcd => {self.push(self.pc + 2); self.pc = self.fetch_word(); 6}
             0xce => {let v = self.fetch_byte(); self.adc(v); 2}
             0xcf => {self.call(0x08); 4}
 
             0xd0 => {if !self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
             0xd1 => {let v = self.pop(); self.reg.set_de(v); 3}
             0xd2 => {if !self.reg.get_flag(flags::C) {self.pc = self.fetch_word(); 4} else {3}}
-            0xd4 => {if !self.reg.get_flag(flags::C) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xd4 => {if !self.reg.get_flag(flags::C) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
             0xd5 => {self.push(self.reg.get_de()); 4}
             0xd6 => {let v = self.fetch_byte(); self.reg.a = self.sub_byte(self.reg.a, v); 2}
             0xd7 => {self.call(0x10); 4}
@@ -357,7 +366,7 @@ impl Cpu {
             0xd9 => {self.reti(); 4}
             0xda => {if self.reg.get_flag(flags::C) {self.jr(); 4} else {3}}
 
-            0xdc => {if self.reg.get_flag(flags::C) {let p = self.fetch_word(); self.call(p); 6} else {3}}
+            0xdc => {if self.reg.get_flag(flags::C) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
 
             0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
             0xdf => {self.call(0x18); 4}
@@ -393,11 +402,12 @@ impl Cpu {
             0xf7 => {self.call(0x30); 4}
             0xf8 => {
                 let v = (self.fetch_word() as i8) as u16; 
-                self.reg.set_hl(self.sp + v as u16); 
+                let res = self.sp + v as u16;
+                self.reg.set_hl(res); 
                 self.reg.set_flag(flags::Z, false);
                 self.reg.set_flag(flags::N, false);
-                self.reg.set_flag(flags::H, (((self.sp >> 3) & 0b1) & (v >> 3) & 0b1) == 1);
-                self.reg.set_flag(flags::C, (((self.sp >> 7) & 0b1) & (v >> 7) & 0b1) == 1);
+                self.reg.set_flag(flags::H, (res & 0x0F) + 1 > 0x0F);
+                self.reg.set_flag(flags::C, (res & 0x00FF) + 1 > 0x00FF);
                 3
             }
             0xf9 => {self.sp = self.reg.get_hl(); 2}
@@ -693,8 +703,9 @@ impl Cpu {
     fn inc(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_add(1);
         if res == 0 {self.reg.set_flag(flags::Z, true)} else {self.reg.set_flag(flags::Z, false)}
+        self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, false);
-        self.reg.set_flag(flags::H, carry);
+        self.reg.set_flag(flags::H, (val & 0x0F) + 1 > 0x0F);
         res
     }
 
@@ -702,19 +713,20 @@ impl Cpu {
         let (res, carry) = val.overflowing_sub(1);
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, true);
-        self.reg.set_flag(flags::H, carry);
+        self.reg.set_flag(flags::H, (val & 0x0F) + 1 > 0x0F);
         res
     }
 
     fn jr(&mut self) {
-        self.pc = self.pc + (self.fetch_byte() as i8) as u16
+        let offset = self.fetch_byte() as i8;
+        self.pc = ((self.pc as u32 as i32) + (offset as i32)) as u16;
     }
 
     fn ret(&mut self) {
-        // self.pc = self.stack[self.sp as usize];
-        // self.sp -= 1;
-        self.pc = self.mmu.read_word(self.sp);
-        self.sp += 2;
+        // self.pc = self.mmu.read_word(self.sp);
+        println!("{} {} {}", self.mmu.read_word(self.sp -1), self.mmu.read_word(self.sp), self.mmu.read_word(self.sp + 1));
+        // self.sp += 2;
+        self.pc = self.pop();
     }
 
     fn ei(&mut self) {

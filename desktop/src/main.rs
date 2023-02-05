@@ -4,10 +4,11 @@ use std::fs::File;
 use std::io::Read;
 
 fn main() {
-    let args: Vec<_> = env::args().collect();
-    if args.len() != 2 {
-        println!("Usage: cargo run path/to/game");
-        return;
+    let mut args: Vec<_> = env::args().collect();
+    if args.len() != 2 { // TODO: Add this back for release build
+        // println!("Usage: cargo run path/to/game");
+        // return;
+        args = vec![String::from(""), String::from("cpu_instrs.gb")];
     }
 
     let mut gb = Cpu::new();
