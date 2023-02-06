@@ -45,10 +45,11 @@ impl Cpu {
     }
 
     pub fn load(&mut self, data: &[u8]) {
-        let start = START_ADDR as usize;
-        let end = (START_ADDR as usize) + data.len();
-        // self.ram[start..end].copy_from_slice(data);
-        self.mmu.write(start, end, data);
+        // let start = START_ADDR as usize;
+        // let end = (START_ADDR as usize) + data.len();
+        // self.mmu.write(start, end, data);
+
+        self.mmu.load(data);
     }
 
     // fn fetch(&mut self) -> u8 {
