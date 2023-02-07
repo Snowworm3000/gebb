@@ -16,9 +16,11 @@ pub struct Cpu {
     pc: u16,
     sp: u16,
     ime: bool,
+    tempIme: bool,
     stack: [u16; STACK_SIZE],
     mmu: MMU,
     depth: u8,
+    halt: bool,
 }
 
 impl Cpu {
@@ -29,9 +31,11 @@ impl Cpu {
             pc: 0x100,
             sp: 0xfffe,
             ime: false,
+            tempIme: false,
             stack: [0; STACK_SIZE],
             mmu: MMU::new(),
             depth: 0,
+            halt: false,
         }
     }
     pub fn reset(&mut self) {
@@ -62,7 +66,14 @@ impl Cpu {
         let op = self.fetch_byte();
 
         self.execute(op);
+        if self.ime {
+            if self.tempIme {
+                unimplemented!("Interrupt here.")
+            }
+            self.tempIme = true;
+        }
     }
+
 
     fn fetch_byte(&mut self) -> u8 {
         let byte = self.mmu.read_byte(self.pc);
@@ -72,6 +83,8 @@ impl Cpu {
 
     fn fetch_word(&mut self) -> u16 {
         let word = self.mmu.read_word(self.pc);
+        // println!("Word {:#04x} at {:#04x}", word, self.pc);
+        // println!("Word {:#04x} {:#04x} at {:#04x}", self.fetch_byte(), self.fetch_byte(), self.pc);
         self.pc += 2;
         word
     }
@@ -90,7 +103,7 @@ impl Cpu {
         let fln = if self.reg.get_flag(flags::N) {"N"} else {"-"};
         let flh = if self.reg.get_flag(flags::H) {"H"} else {"-"};
         let flc = if self.reg.get_flag(flags::C) {"C"} else {"-"};
-        println!("{}", self.mmu.read_word(self.sp));
+        // println!("{}", self.mmu.read_word(self.sp));
         println!("A: {:#04x} F: {flz}{fln}{flh}{flc} BC {:#04x} DE {:#04x} HL {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
         let timing = match op {
             // Notation for LD functions:
@@ -372,9 +385,9 @@ impl Cpu {
             0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
             0xdf => {self.call(0x18); 4}
 
-            0xe0 => {let v = self.fetch_byte() as u16; self.mmu.write_byte(self.mmu.read_byte(0xff00 + v) as u16, self.reg.a); 3}
+            0xe0 => {let v =  0xff00 | self.fetch_byte() as u16; self.mmu.write_byte(v, self.reg.a); 3}
             0xe1 => {let v = self.pop(); self.reg.set_hl(v); 3}
-            0xe2 => {self.mmu.write_byte(self.mmu.read_byte(0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
+            0xe2 => {self.mmu.write_byte((0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
 
             0xe5 => {self.push(self.reg.get_hl()); 4}
             0xe6 => {let v = self.fetch_byte(); self.and(v); 2}
@@ -735,6 +748,7 @@ impl Cpu {
     }
     fn di(&mut self) {
         self.ime = false;
+        self.tempIme = false;
     }
 
     fn reti(&mut self) {
