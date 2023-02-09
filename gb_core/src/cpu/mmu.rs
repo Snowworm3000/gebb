@@ -13,7 +13,7 @@ pub struct MMU {
     serial: u8,
     serial2: u8,
     hram: [u8; 0x7f],
-    ie: u8,
+    IE: u8,
     tac: u8,
     IF: u8,
 }
@@ -30,7 +30,7 @@ impl MMU {
             serial: 0,
             serial2: 0,
             hram: [0; 0x7f],
-            ie: 0,
+            IE: 0,
             tac: 0,
             IF: 0,
         };
@@ -111,8 +111,9 @@ impl MMU {
             0xff02 => {self.serial2 = data;}
             0xff07 => {self.tac = data}
             0xff0f => {self.IF = data}
+            0xff10..=0xff3f => {println!("Audio handling skipped")}
             0xff80..=0xfffe=> {self.hram[(pointer as usize - 0xff80) as usize] = data}
-            0xffff => {self.ie = data}
+            0xffff => {self.IE = data}
             _ => unimplemented!("Undefined write location {:#04x}", pointer)
         };
     }
@@ -120,8 +121,8 @@ impl MMU {
     pub fn write_word(&mut self, pointer: u16, data: u16){
         let data_h = (data >> 8) as u8;
         let data_l = data as u8;
-        self.ram[pointer as usize] = data_h;
-        self.ram[(pointer as usize) + 1] = data_l;
+        self.write_byte(pointer, data_h);
+        self.write_byte(pointer + 1, data_l);
     }
 
     pub fn read_byte(&self, loc: u16) -> u8 {
@@ -133,9 +134,10 @@ impl MMU {
             0xff02 => {self.serial2}
             0xff07 => {self.tac}
             0xff0f => {self.IF}
+            0xff10..=0xff3f => {println!("Audio handling skipped"); 0}
             0xfea0..=0xfeff=> {0xFF}
             0xff80..=0xfffe=> {self.hram[(loc as usize - 0xff80) as usize]}
-            0xffff => {self.ie}
+            0xffff => {self.IE}
             _ => unimplemented!("Undefined read location {:#04x}", loc)
         }
     }
