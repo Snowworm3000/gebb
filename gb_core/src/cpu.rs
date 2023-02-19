@@ -67,7 +67,7 @@ impl Cpu {
 
         self.execute(op);
         if self.ime {
-            if self.tempIme { // TODO: Interrupt here
+            if self.tempIme { // TODO: Interrupt here. Timing is 5 machine cycles I think.
                 // unimplemented!("Interrupt here.")
                 self.pc -= 1; // because we are not using op
                 let interrupt_enable = self.rightmost_set_bit(self.mmu.read_byte(0xffff));
@@ -80,7 +80,19 @@ impl Cpu {
                     self.mmu.write_byte(0xff0f, self.res(interrupt_flag, original_flag));
                     match interrupt_enable {
                         0 => { // VBlank interrupt
-                            unimplemented!("Idk what needs to happen here yet")
+                            self.call(0x40);
+                        }
+                        1 => {
+                            self.call(0x48);
+                        }
+                        2 => {
+                            self.call(0x50);
+                        }
+                        3 => {
+                            self.call(0x58);
+                        }
+                        4 => {
+                            self.call(0x60);
                         }
                         _ => {unimplemented!("Unimplemented interrupt")}
                     }

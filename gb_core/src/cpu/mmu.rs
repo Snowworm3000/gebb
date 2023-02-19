@@ -16,6 +16,8 @@ pub struct MMU {
     IE: u8,
     tac: u8,
     IF: u8,
+    wram: [u8; ROM_SIZE],
+    wram1: [u8; ROM_SIZE],
 }
 
 impl MMU {
@@ -33,6 +35,8 @@ impl MMU {
             IE: 0,
             tac: 0,
             IF: 0,
+            wram: [0; ROM_SIZE],
+            wram1: [0; ROM_SIZE],
         };
         // mmu.reset();
         mmu
@@ -106,7 +110,9 @@ impl MMU {
         // self.ram[pointer as usize] = data;
         match pointer {
             0x0000..=0x7fff=> {unimplemented!("Attempt to write rom {:#04x}", data)}
-            0xA000..=0xdfff=> {self.ram[(pointer - 0xA000) as usize] = data;}
+            0xA000..=0xbfff=> {self.ram[(pointer - 0xA000) as usize] = data;}
+            0xc000..=0xcfff=> {self.wram[(pointer - 0xc000) as usize] = data;}
+            0xd000..=0xdfff=> {self.wram1[(pointer - 0xd000) as usize] = data;}
             0xff01 => {self.serial = data;}
             0xff02 => {self.serial2 = data;}
             0xff07 => {self.tac = data}
@@ -121,15 +127,17 @@ impl MMU {
     pub fn write_word(&mut self, pointer: u16, data: u16){
         let data_h = (data >> 8) as u8;
         let data_l = data as u8;
-        self.write_byte(pointer, data_h);
-        self.write_byte(pointer + 1, data_l);
+        self.write_byte(pointer, data_l);
+        self.write_byte(pointer + 1, data_h);
     }
 
     pub fn read_byte(&self, loc: u16) -> u8 {
         match loc {
             0x0000..=0x3fff=> {self.rom[loc as usize]}
             0x4000..=0x7fff=> {self.rom1[(loc as usize - ROM_SIZE) as usize]} //TODO : Change depending on current rom bank
-            0xA000..=0xdfff=> {self.ram[(loc - 0xA000) as usize]}
+            0xA000..=0xbfff=> {self.ram[(loc - 0xA000) as usize]}
+            0xc000..=0xcfff=> {self.wram[(loc - 0xc000) as usize]}
+            0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize]}
             0xff01 => {self.serial}
             0xff02 => {self.serial2}
             0xff07 => {self.tac}
