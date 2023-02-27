@@ -10,8 +10,7 @@ pub struct MMU {
     rom2: [u8; ROM_SIZE],
     rom3: [u8; ROM_SIZE],
     rom4: [u8; ROM_SIZE],
-    serial: u8,
-    serial2: u8,
+    io: [u8; 0x80],
     hram: [u8; 0x7f],
     IE: u8,
     tac: u8,
@@ -29,8 +28,7 @@ impl MMU {
             rom2: [0; ROM_SIZE],
             rom3: [0; ROM_SIZE],
             rom4: [0; ROM_SIZE],
-            serial: 0,
-            serial2: 0,
+            io: [0; 0x80],
             hram: [0; 0x7f],
             IE: 0,
             tac: 0,
@@ -108,16 +106,15 @@ impl MMU {
 
     pub fn write_byte(&mut self, pointer: u16, data: u8){
         // self.ram[pointer as usize] = data;
+        if pointer == 0xff01 {
+            println!("{}", data);
+        }
         match pointer {
             0x0000..=0x7fff=> {unimplemented!("Attempt to write rom {:#04x}", data)}
             0xA000..=0xbfff=> {self.ram[(pointer - 0xA000) as usize] = data;}
             0xc000..=0xcfff=> {self.wram[(pointer - 0xc000) as usize] = data;}
             0xd000..=0xdfff=> {self.wram1[(pointer - 0xd000) as usize] = data;}
-            0xff01 => {self.serial = data;}
-            0xff02 => {self.serial2 = data;}
-            0xff07 => {self.tac = data}
-            0xff0f => {self.IF = data}
-            0xff10..=0xff3f => {println!("Audio handling skipped")}
+            0xff00..=0xff7f => {self.io[(pointer - 0xff00) as usize] = data;}
             0xff80..=0xfffe=> {self.hram[(pointer as usize - 0xff80) as usize] = data}
             0xffff => {self.IE = data}
             _ => unimplemented!("Undefined write location {:#04x}", pointer)
@@ -138,12 +135,8 @@ impl MMU {
             0xA000..=0xbfff=> {self.ram[(loc - 0xA000) as usize]}
             0xc000..=0xcfff=> {self.wram[(loc - 0xc000) as usize]}
             0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize]}
-            0xff01 => {self.serial}
-            0xff02 => {self.serial2}
-            0xff07 => {self.tac}
-            0xff0f => {self.IF}
-            0xff10..=0xff3f => {println!("Audio handling skipped"); 0}
             0xfea0..=0xfeff=> {0xFF}
+            0xff00..=0xff7f => {self.io[(loc - 0xff00) as usize]}
             0xff80..=0xfffe=> {self.hram[(loc as usize - 0xff80) as usize]}
             0xffff => {self.IE}
             _ => unimplemented!("Undefined read location {:#04x}", loc)

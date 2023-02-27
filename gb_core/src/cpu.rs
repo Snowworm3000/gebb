@@ -10,6 +10,8 @@ const RAM_SIZE: usize = 0x100; // I'm not entirely sure how large this should be
 const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
 const START_ADDR: usize = 0x0;
 
+const LOG_LEVEL: usize = 3;
+
 pub struct Cpu {
     reg: Registers,
     // ram: [u8; RAM_SIZE],
@@ -21,6 +23,7 @@ pub struct Cpu {
     mmu: MMU,
     depth: u8,
     halt: bool,
+    cycle: usize,
 }
 
 impl Cpu {
@@ -36,6 +39,7 @@ impl Cpu {
             mmu: MMU::new(),
             depth: 0,
             halt: false,
+            cycle: 0,
         }
     }
     pub fn reset(&mut self) {
@@ -46,6 +50,7 @@ impl Cpu {
         self.ime = false;
         self.stack = [0; STACK_SIZE];
         self.mmu.reset();
+        self.cycle = 0;
     }
 
     pub fn load(&mut self, data: &[u8]) {
@@ -61,6 +66,7 @@ impl Cpu {
     //     self.pc += 1;
     //     op
     // }
+    
 
     pub fn tick(&mut self) {
         let op = self.fetch_byte();
@@ -126,8 +132,10 @@ impl Cpu {
     }
 
     fn execute(&mut self, op: u8) {
+        self.cycle += 1;
         if (self.mmu.read_byte(0xff02) == 0x81) {
             let c = self.mmu.read_byte(0xff01);
+            println!("{}", c);
             if let Ok(s) = str::from_utf8(&[c]) {
                 println!("{}", s);
             }
@@ -140,7 +148,9 @@ impl Cpu {
         let flh = if self.reg.get_flag(flags::H) {"H"} else {"-"};
         let flc = if self.reg.get_flag(flags::C) {"C"} else {"-"};
         // println!("{}", self.mmu.read_word(self.sp));
-        println!("A: {:#04x} F: {flz}{fln}{flh}{flc} BC {:#04x} DE {:#04x} HL {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+        if LOG_LEVEL >= 3 {
+            println!("{} A: {:#04x} F: {flz}{fln}{flh}{flc} BC {:#04x} DE {:#04x} HL {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+        }
         let timing = match op {
             // Notation for LD functions:
             // LD(to_set, set_with)
@@ -613,7 +623,9 @@ impl Cpu {
             }
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
-        print!("length of execution {}\n", timing);
+        if LOG_LEVEL >= 4 {
+            print!("length of execution {}\n", timing);
+        }
     }
 
     fn adc(&mut self, val: u8) {
@@ -774,7 +786,7 @@ impl Cpu {
 
     fn ret(&mut self) {
         // self.pc = self.mmu.read_word(self.sp);
-        println!("{} {} {}", self.mmu.read_word(self.sp -1), self.mmu.read_word(self.sp), self.mmu.read_word(self.sp + 1));
+        // println!("{} {} {}", self.mmu.read_word(self.sp -1), self.mmu.read_word(self.sp), self.mmu.read_word(self.sp + 1));
         // self.sp += 2;
         self.pc = self.pop();
     }
