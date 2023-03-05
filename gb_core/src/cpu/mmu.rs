@@ -1,4 +1,5 @@
 use crate::mbc;
+use crate::ppu::PPU;
 
 const ROM_SIZE: usize = 0x4000;
 const RAM_SIZE: usize = 0x5000;
@@ -17,6 +18,7 @@ pub struct MMU {
     IF: u8,
     wram: [u8; ROM_SIZE],
     wram1: [u8; ROM_SIZE],
+    pub ppu: PPU,
 }
 
 impl MMU {
@@ -35,6 +37,7 @@ impl MMU {
             IF: 0,
             wram: [0; ROM_SIZE],
             wram1: [0; ROM_SIZE],
+            ppu: PPU::new(),
         };
         // mmu.reset();
         mmu
@@ -111,6 +114,7 @@ impl MMU {
         }
         match pointer {
             0x0000..=0x7fff=> {unimplemented!("Attempt to write rom {:#04x}", data)}
+            0x8000 ..= 0x9FFF => self.ppu.write_byte(pointer, data),
             0xA000..=0xbfff=> {self.ram[(pointer - 0xA000) as usize] = data;}
             0xc000..=0xcfff=> {self.wram[(pointer - 0xc000) as usize] = data;}
             0xd000..=0xdfff=> {self.wram1[(pointer - 0xd000) as usize] = data;}
@@ -132,6 +136,7 @@ impl MMU {
         match loc {
             0x0000..=0x3fff=> {self.rom[loc as usize]}
             0x4000..=0x7fff=> {self.rom1[(loc as usize - ROM_SIZE) as usize]} //TODO : Change depending on current rom bank
+            0x8000 ..= 0x9FFF => self.ppu.read_byte(loc),
             0xA000..=0xbfff=> {self.ram[(loc - 0xA000) as usize]}
             0xc000..=0xcfff=> {self.wram[(loc - 0xc000) as usize]}
             0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize]}

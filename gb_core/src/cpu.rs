@@ -1,11 +1,16 @@
 mod registers;
 use core::panic;
+use std::fs::File;
+use std::io::{Read, BufReader, BufRead, Lines};
 use std::ops::Shl;
+use std::os::unix::prelude::FileExt;
 use std::str;
 
 use registers::*;
 mod mmu;
 use mmu::*;
+
+use crate::debug_reader;
 const RAM_SIZE: usize = 0x100; // I'm not entirely sure how large this should be yet.
 const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
 const START_ADDR: usize = 0x0;
@@ -24,14 +29,15 @@ pub struct Cpu {
     depth: u8,
     halt: bool,
     cycle: usize,
+    debug_file: Vec<String>,
 }
 
 impl Cpu {
     pub fn new() -> Self {
-        Self {
+        let mut temp = Self {
             reg: Registers::new_default(),
             // ram: [0; RAM_SIZE],
-            pc: 0x100,
+            pc: 0x101,
             sp: 0xfffe,
             ime: false,
             tempIme: false,
@@ -40,7 +46,20 @@ impl Cpu {
             depth: 0,
             halt: false,
             cycle: 0,
+            debug_file: Vec::new(),
+        };
+        // BufReader::new(File::open("tetris_output.txt").expect("Unable to open file")).read_until(b'\n',&mut temp.debug_file).unwrap();
+
+
+        let mut reader = debug_reader::BufReader::open("/home/ethan/code/rust/gebb/tetris_output.txt").expect("test");
+        let mut buffer = String::new();
+
+        while let Some(line) = reader.read_line(&mut buffer) {
+            // println!("{}", line.expect("test").trim());
+            temp.debug_file.push(line.expect("test").trim().to_string());
         }
+
+        temp
     }
     pub fn reset(&mut self) {
         self.reg = Registers::new_default();
@@ -67,6 +86,9 @@ impl Cpu {
     //     op
     // }
     
+    pub fn get_display(&self) -> &Vec<u8> {
+        &self.mmu.ppu.data
+    }
 
     pub fn tick(&mut self) {
         let op = self.fetch_byte();
@@ -131,6 +153,18 @@ impl Cpu {
         word
     }
 
+    fn debug_equal_u8(&self, first: &str, second: u8) -> bool {
+        u8::from_str_radix(first, 16).expect("msg") == second
+    }
+
+    fn debug_equal(&self, first: &str, second: u16) -> bool {
+        u16::from_str_radix(first, 16).expect("msg") == second
+    }
+
+    fn to_num(&self, v: bool) -> u8 {
+        if v {1} else {0}
+    }
+
     fn execute(&mut self, op: u8) {
         self.cycle += 1;
         if (self.mmu.read_byte(0xff02) == 0x81) {
@@ -150,6 +184,65 @@ impl Cpu {
         // println!("{}", self.mmu.read_word(self.sp));
         if LOG_LEVEL >= 3 {
             println!("{} A: {:#04x} F: {flz}{fln}{flh}{flc} BC {:#04x} DE {:#04x} HL {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+            println!("{}", self.debug_file[self.cycle]);
+            let line_vec: Vec<char> = self.debug_file[self.cycle].chars().collect();
+            let line = &self.debug_file[self.cycle];
+            let pos = [line.find("A:").expect("msg"), line.find("F:").expect("msg"), line.find("BC:").expect("msg"), line.find("DE:").expect("msg"), line.find("HL:").expect("msg"), line.find("SP:").expect("msg"), line.find("PC:").expect("msg")];
+            println!("{} {} {}", line_vec[pos[0] + 2], line_vec[pos[0] + 3], pos[0].to_string());
+            
+            let mut A = String::new();
+            A.push(line_vec[pos[0] + 2]);
+            A.push(line_vec[pos[0] + 3]);
+
+
+            // println!("{} {} ", line_vec[pos[1] + 2], line_vec[pos[1] + 3]);
+            let mut F: u8 = 0;
+            F |= self.to_num(line_vec[pos[1] + 2] != '-') << 7;
+            F |= self.to_num(line_vec[pos[1] + 3] != '-')  << 6;
+            F |= self.to_num(line_vec[pos[1] + 4] != '-')  << 5;
+            F |= self.to_num(line_vec[pos[1] + 5] != '-')  << 4;
+
+            // println!("{:#08b} {:#08b}", F, self.reg.f);
+
+            let mut B = String::new();
+            B.push(line_vec[pos[2] + 3]);
+            B.push(line_vec[pos[2] + 4]);
+            B.push(line_vec[pos[2] + 5]);
+            B.push(line_vec[pos[2] + 6]);
+
+            let mut D = String::new();
+            D.push(line_vec[pos[3] + 3]);
+            D.push(line_vec[pos[3] + 4]);
+            D.push(line_vec[pos[3] + 5]);
+            D.push(line_vec[pos[3] + 6]);
+
+            let mut H = String::new();
+            H.push(line_vec[pos[4] + 3]);
+            H.push(line_vec[pos[4] + 4]);
+            H.push(line_vec[pos[4] + 5]);
+            H.push(line_vec[pos[4] + 6]);
+
+            let mut SP = String::new();
+            SP.push(line_vec[pos[5] + 3]);
+            SP.push(line_vec[pos[5] + 4]);
+            SP.push(line_vec[pos[5] + 5]);
+            SP.push(line_vec[pos[5] + 6]);
+
+            let mut PC = String::new();
+            PC.push(line_vec[pos[6] + 3]);
+            PC.push(line_vec[pos[6] + 4]);
+            PC.push(line_vec[pos[6] + 5]);
+            PC.push(line_vec[pos[6] + 6]);
+
+            println!("{} {} {} {} {} {} {}", self.debug_equal_u8(&A, self.reg.a), F == self.reg.f, self.debug_equal(&B, self.reg.get_bc()), self.debug_equal(&D, self.reg.get_de()), self.debug_equal(&H, self.reg.get_hl()), self.debug_equal(&SP, self.sp), self.debug_equal(&PC, self.pc -1));
+
+            // println!("{} {} {}", PC, self.pc -1 , u16::from_str_radix(&PC, 16).expect("msg"));
+            
+            let conditions = (self.debug_equal_u8(&A, self.reg.a) && F == self.reg.f && self.debug_equal(&B, self.reg.get_bc()) && self.debug_equal(&D, self.reg.get_de()) && self.debug_equal(&H, self.reg.get_hl()) && self.debug_equal(&SP, self.sp) && self.debug_equal(&PC, self.pc -1));
+            println!("{} {}", self.debug_equal_u8(&A, self.reg.a), self.reg.a);
+            if !conditions {
+                unimplemented!("Not matching original");
+            }
         }
         let timing = match op {
             // Notation for LD functions:
@@ -445,7 +538,8 @@ impl Cpu {
             0xee => {let v = self.fetch_byte(); self.xor(v); 2}
             0xef => {self.call(0x28); 4}
 
-            0xf0 => {let v = self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 3}
+            // 0xf0 => {let v = self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 3}
+            0xf0 => {let v = 0xFF00 | self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(v); 3 }
             0xf1 => { // This pop is slightly different.
                 let v = self.pop(); self.reg.set_af(v); 
                 self.reg.set_flag(flags::Z, (v >> 6) & 0b1 == 1);
@@ -767,7 +861,7 @@ impl Cpu {
         if res == 0 {self.reg.set_flag(flags::Z, true)} else {self.reg.set_flag(flags::Z, false)}
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, false);
-        self.reg.set_flag(flags::H, (val & 0x0F) + 1 > 0x0F);
+        self.reg.set_flag(flags::H, (val & 0x0F) == 0);
         res
     }
 
@@ -775,7 +869,7 @@ impl Cpu {
         let (res, carry) = val.overflowing_sub(1);
         self.reg.set_flag(flags::Z, res == 0);
         self.reg.set_flag(flags::N, true);
-        self.reg.set_flag(flags::H, (val & 0x0F) + 1 > 0x0F);
+        self.reg.set_flag(flags::H, (val & 0x0F) == 0);
         res
     }
 
@@ -953,6 +1047,14 @@ mod test {
     //     cpu.execute(0xcb);
     //     assert_eq!(cpu.mmu.read_byte(cpu.reg.get_hl()), 0b1);
     // }
+
+    #[test]
+    fn xor_a() {
+        let mut cpu = Cpu::new();
+        cpu.reg.a = 0x01;
+        cpu.execute(0xaf);
+        assert_eq!(cpu.reg.a, 0b0);
+    }
 
     #[test]
     fn rightmost_set_bit() {
