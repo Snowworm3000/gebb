@@ -35,7 +35,7 @@ impl Registers{
         Registers {a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, h:0, l:0}
     }
     pub fn new_default() -> Registers{
-        Registers { a: 0x01, b: 0x00, c: 0x13, d: 0x00, e: 0xd8, f: 0xb0, h: 0x01, l: 0x4d}
+        Registers { a: 0x11, b: 0x00, c: 0x13, d: 0x00, e: 0xd8, f: 0xb0, h: 0x01, l: 0x4d}
     }
     pub fn get_af(&self) -> u16{
         (self.a as u16) << 8 | self.f as u16

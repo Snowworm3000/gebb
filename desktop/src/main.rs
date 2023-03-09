@@ -20,7 +20,7 @@ fn main() {
         // TODO: Add this back for release build
         // println!("Usage: cargo run path/to/game");
         // return;
-        args = vec![String::from(""), String::from("cpu_instrs.gb")];
+        args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/06.gb")];
     }
 
     let mut gb = Cpu::new();
@@ -32,7 +32,7 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Chip-8 Emulator", WINDOW_WIDTH, WINDOW_HEIGHT)
+        .window("Gebb", WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
         .opengl()
         .build()
@@ -54,7 +54,9 @@ fn main() {
 
         gb.tick();
         // TODO: Run renderer on seperate thread.
-        draw_screen(&gb, &mut canvas)
+        if gb.ppu_updated() {
+            draw_screen(&gb, &mut canvas)
+        }
     }
 }
 

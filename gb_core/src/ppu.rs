@@ -131,6 +131,7 @@ impl PPU {
             0xFF42 => self.scy,
             0xFF43 => self.scx,
             0xFF44 => self.line,
+            // 0xFF44 => 0x90,
             0xFF45 => self.lyc,
             0xFF46 => 0, // Write only
             0xFF47 => self.palbr,
