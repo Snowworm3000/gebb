@@ -20,7 +20,7 @@ fn main() {
         // TODO: Add this back for release build
         // println!("Usage: cargo run path/to/game");
         // return;
-        args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/06.gb")];
+        args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/02-interrupts.gb")];
     }
 
     let mut gb = Cpu::new();
@@ -52,7 +52,7 @@ fn main() {
             }
         }
 
-        gb.tick();
+        gb.do_cycle();
         // TODO: Run renderer on seperate thread.
         if gb.ppu_updated() {
             draw_screen(&gb, &mut canvas)

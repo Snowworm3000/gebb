@@ -2,7 +2,7 @@ use cpu::Cpu;
 pub mod cpu;
 pub mod mbc;
 pub mod ppu;
-
+pub mod timer;
 
 mod debug_reader {
     use std::{

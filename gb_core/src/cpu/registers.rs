@@ -107,6 +107,16 @@ impl Registers{
         self.f = 0;
     }
 
+    pub fn hld(&mut self) -> u16 {
+        let res = self.get_hl();
+        self.set_hl(res - 1);
+        res
+    }
+    pub fn hli(&mut self) -> u16 {
+        let res = self.get_hl();
+        self.set_hl(res + 1);
+        res
+    }
     
 }
 

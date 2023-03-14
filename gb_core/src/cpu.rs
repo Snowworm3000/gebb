@@ -15,7 +15,7 @@ const RAM_SIZE: usize = 0x100; // I'm not entirely sure how large this should be
 const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
 const START_ADDR: usize = 0x0;
 
-const LOG_LEVEL: usize = 2;
+const LOG_LEVEL: usize = 3;
 
 pub struct Cpu {
     reg: Registers,
@@ -29,7 +29,11 @@ pub struct Cpu {
     depth: u8,
     halt: bool,
     cycle: usize,
+    line: usize,
     debug_file: Vec<String>,
+    halted: bool,
+    setdi: u32,
+    setei: u32,
 }
 
 impl Cpu {
@@ -37,7 +41,7 @@ impl Cpu {
         let mut temp = Self {
             reg: Registers::new_default(),
             // ram: [0; RAM_SIZE],
-            pc: 0x101,
+            pc: 0x100,
             sp: 0xfffe,
             ime: false,
             tempIme: false,
@@ -46,7 +50,11 @@ impl Cpu {
             depth: 0,
             halt: false,
             cycle: 0,
+            line: 0,
             debug_file: Vec::new(),
+            halted: false,
+            setdi: 0,
+            setei: 0,
         };
         // BufReader::new(File::open("tetris_output.txt").expect("Unable to open file")).read_until(b'\n',&mut temp.debug_file).unwrap();
 
@@ -69,7 +77,7 @@ impl Cpu {
         self.sp = 0xfffe;
         self.ime = false;
         self.stack = [0; STACK_SIZE];
-        self.mmu.reset();
+        // self.mmu.reset();
         self.cycle = 0;
     }
 
@@ -91,51 +99,113 @@ impl Cpu {
         &self.mmu.ppu.data
     }
 
-    pub fn tick(&mut self) {
-        let op = self.fetch_byte();
-
-        let ticks = self.execute(op) * 4;
-        self.mmu.ppu.do_cycle(ticks);
-        self.mmu.ppu.interrupt = 0;
-        if self.ime {
-            if self.tempIme { // TODO: Interrupt here. Timing is 5 machine cycles I think.
-                // unimplemented!("Interrupt here.")
-                self.pc -= 1; // because we are not using op
-                let interrupt_enable = self.rightmost_set_bit(self.mmu.read_byte(0xffff));
-                let interrupt_flag = self.rightmost_set_bit(self.mmu.read_byte(0xff0f));
-                if (interrupt_enable == interrupt_flag) & self.ime {
-                    self.ime = false;
-                    let original_enable = self.mmu.read_byte(0xffff);
-                    let original_flag = self.mmu.read_byte(0xffff);
-                    self.mmu.write_byte(0xffff, self.res(interrupt_enable, original_enable));
-                    self.mmu.write_byte(0xff0f, self.res(interrupt_flag, original_flag));
-                    match interrupt_enable {
-                        0 => { // VBlank interrupt
-                            self.call(0x40);
-                        }
-                        1 => {
-                            self.call(0x48);
-                        }
-                        2 => {
-                            self.call(0x50);
-                        }
-                        3 => {
-                            self.call(0x58);
-                        }
-                        4 => {
-                            self.call(0x60);
-                        }
-                        _ => {unimplemented!("Unimplemented interrupt")}
-                    }
-                }
-
-            }
-            self.tempIme = true;
-        } else {
-            self.tempIme = false;
-        }
-        
+    pub fn do_cycle(&mut self) -> u32 {
+        let ticks = self.docycle() * 4;
+        return self.mmu.do_cycle(ticks);
     }
+
+    fn docycle(&mut self) -> u32 {
+        self.updateime();
+        match self.handleinterrupt() {
+            0 => {},
+            n => return n,
+        };
+
+        if self.halted {
+            // Emulate an noop instruction
+            1
+        } else {
+            let op = self.fetch_byte();
+            self.execute(op)
+        }
+    }
+
+    fn updateime(&mut self) {
+        self.setdi = match self.setdi {
+            2 => 1,
+            1 => { self.ime = false; 0 },
+            _ => 0,
+        };
+        self.setei = match self.setei {
+            2 => 1,
+            1 => { self.ime = true; 0 },
+            _ => 0,
+        };
+    }
+
+    fn handleinterrupt(&mut self) -> u32 {
+        if self.ime == false && self.halted == false { return 0 }
+
+        let triggered = self.mmu.inte & self.mmu.intf;
+        if triggered == 0 { return 0 }
+
+        self.halted = false;
+        if self.ime == false { return 0 }
+        self.ime = false;
+
+        let n = triggered.trailing_zeros();
+        if n >= 5 { panic!("Invalid interrupt triggered"); }
+        self.mmu.intf &= !(1 << n);
+        let pc = self.pc;
+        self.push(pc);
+        self.pc = 0x0040 | ((n as u16) << 3);
+
+        return 4
+    }
+
+    // pub fn tick(&mut self) {
+    //     let op = self.fetch_byte();
+
+    //     let ticks = self.execute(op) * 4;
+
+    //     let vramticks = self.mmu.perform_vramdma();
+    //     let cputicks = ticks + vramticks;
+
+    //     self.mmu.timer.do_cycle(cputicks);
+    //     // self.mmu.intf |= self.timer.interrupt;
+    //     self.mmu.timer.interrupt = 0;
+
+    //     self.mmu.ppu.do_cycle(cputicks);
+    //     self.mmu.ppu.interrupt = 0;
+    //     if self.ime {
+    //         if self.tempIme { // TODO: Interrupt here. Timing is 5 machine cycles I think.
+    //             // unimplemented!("Interrupt here.")
+    //             self.pc -= 1; // because we are not using op
+    //             let interrupt_enable = self.rightmost_set_bit(self.mmu.read_byte(0xffff));
+    //             let interrupt_flag = self.rightmost_set_bit(self.mmu.read_byte(0xff0f));
+    //             if (interrupt_enable == interrupt_flag) & self.ime {
+    //                 self.ime = false;
+    //                 let original_enable = self.mmu.read_byte(0xffff);
+    //                 let original_flag = self.mmu.read_byte(0xffff);
+    //                 self.mmu.write_byte(0xffff, self.res(interrupt_enable, original_enable));
+    //                 self.mmu.write_byte(0xff0f, self.res(interrupt_flag, original_flag));
+    //                 match interrupt_enable {
+    //                     0 => { // VBlank interrupt
+    //                         self.call(0x40);
+    //                     }
+    //                     1 => {
+    //                         self.call(0x48);
+    //                     }
+    //                     2 => {
+    //                         self.call(0x50);
+    //                     }
+    //                     3 => {
+    //                         self.call(0x58);
+    //                     }
+    //                     4 => {
+    //                         self.call(0x60);
+    //                     }
+    //                     _ => {unimplemented!("Unimplemented interrupt")}
+    //                 }
+    //             }
+
+    //         }
+    //         self.tempIme = true;
+    //     } else {
+    //         self.tempIme = false;
+    //     }
+        
+    // }
 
     fn rightmost_set_bit(&self, val: u8) -> u8 {
         ((val & !(val-1)) as f32).log2() as u8
@@ -175,7 +245,7 @@ impl Cpu {
     }
 
     fn execute(&mut self, op: u8) -> u32{
-        self.cycle += 1;
+        
         // if (self.mmu.read_byte(0xff02) == 0x81) {
         //     let c = self.mmu.read_byte(0xff01);
         //     println!("{}", c);
@@ -193,82 +263,106 @@ impl Cpu {
         // println!("{}", self.mmu.read_word(self.sp));
 
         if LOG_LEVEL >= 3 {
-            let this = format!("{} A:{:#04x} F:{flz}{fln}{flh}{flc} BC:{:#04x} DE:{:#04x} HL:{:#04x} SP:{:#04x} PC:{:#04x} Opcode:{:#04x} Flags:{:#04x}", self.cycle + 1, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+            let this = format!("{} A:{:#04x} F:{flz}{fln}{flh}{flc} BC:{:#04x} DE:{:#04x} HL:{:#04x} SP:{:#04x} PC:{:#04x} Opcode:{:#04x} Flags:{:#04x} Next:{:#04x}", self.cycle + 1, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f, self.mmu.read_word(self.pc));
             println!("{}", this);
-            println!("{}", self.debug_file[self.cycle]);
-            if this != self.debug_file[self.cycle]{
+            println!("{}", self.debug_file[self.line]);
+            if this != self.debug_file[self.line]{
+                unimplemented!("Not matching original");
+            }
+            self.line += 1;
+
+            let this = format!("{}", self.mmu.ppu.modeclock);
+            println!("{}", this);
+            println!("{}", self.debug_file[(self.line)]);
+            if this != self.debug_file[self.line ]{
+                unimplemented!("Not matching original");
+            }
+            self.line += 1;
+
+            let this = format!("{}", self.mmu.ppu.line);
+            println!("{}", this);
+
+            println!("{}", self.debug_file[(self.line)]);
+            if this != self.debug_file[self.line ]{
                 unimplemented!("Not matching original");
             }
 
-
-        }
-        if LOG_LEVEL >= 3 && false{
-            println!("{} A:{:#04x} F:{flz}{fln}{flh}{flc} BC:{:#04x} DE:{:#04x} HL:{:#04x} SP:{:#04x} PC:{:#04x} Opcode:{:#04x} Flags:{:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
-            // println!("{} A: {:#04x} BC: {:#04x} DE: {:#04x} HL: {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
-            println!("{}", self.debug_file[self.cycle]);
-            let line_vec: Vec<char> = self.debug_file[self.cycle].chars().collect();
-            let line = &self.debug_file[self.cycle];
-            let pos = [line.find("A:").expect("msg"), line.find("F:").expect("msg"), line.find("BC:").expect("msg"), line.find("DE:").expect("msg"), line.find("HL:").expect("msg"), line.find("SP:").expect("msg"), line.find("PC:").expect("msg")];
-            // println!("{} {} {}", line_vec[pos[0] + 2], line_vec[pos[0] + 3], pos[0].to_string());
-            
-            let mut A = String::new();
-            A.push(line_vec[pos[0] + 2]);
-            A.push(line_vec[pos[0] + 3]);
-
-
-            // println!("{} {} ", line_vec[pos[1] + 2], line_vec[pos[1] + 3]);
-            let mut F: u8 = 0;
-            F |= self.to_num(line_vec[pos[1] + 2] != '-') << 7;
-            F |= self.to_num(line_vec[pos[1] + 3] != '-')  << 6;
-            F |= self.to_num(line_vec[pos[1] + 4] != '-')  << 5;
-            F |= self.to_num(line_vec[pos[1] + 5] != '-')  << 4;
-
-            // println!("{:#08b} {:#08b}", F, self.reg.f);
-
-            let mut B = String::new();
-            B.push(line_vec[pos[2] + 3]);
-            B.push(line_vec[pos[2] + 4]);
-            B.push(line_vec[pos[2] + 5]);
-            B.push(line_vec[pos[2] + 6]);
-
-            let mut D = String::new();
-            D.push(line_vec[pos[3] + 3]);
-            D.push(line_vec[pos[3] + 4]);
-            D.push(line_vec[pos[3] + 5]);
-            D.push(line_vec[pos[3] + 6]);
-
-            let mut H = String::new();
-            H.push(line_vec[pos[4] + 3]);
-            H.push(line_vec[pos[4] + 4]);
-            H.push(line_vec[pos[4] + 5]);
-            H.push(line_vec[pos[4] + 6]);
-
-            let mut SP = String::new();
-            SP.push(line_vec[pos[5] + 3]);
-            SP.push(line_vec[pos[5] + 4]);
-            SP.push(line_vec[pos[5] + 5]);
-            SP.push(line_vec[pos[5] + 6]);
-
-            let mut PC = String::new();
-            PC.push(line_vec[pos[6] + 3]);
-            PC.push(line_vec[pos[6] + 4]);
-            PC.push(line_vec[pos[6] + 5]);
-            PC.push(line_vec[pos[6] + 6]);
-
-            // println!("{:#08b} {:#08b} {:#08b} {:#08b} {:#08b} {:#08b} {:#08b}", A, F, B, D, H, SP, PC);
-            println!("{}", line_vec[2]);
-
-            println!("{} {} {} {} {} {} {}", self.debug_equal_u8(&A, self.reg.a), F == self.reg.f, self.debug_equal(&B, self.reg.get_bc()), self.debug_equal(&D, self.reg.get_de()), self.debug_equal(&H, self.reg.get_hl()), self.debug_equal(&SP, self.sp), self.debug_equal(&PC, self.pc -1));
-
-            // println!("{} {} {}", PC, self.pc -1 , u16::from_str_radix(&PC, 16).expect("msg"));
-            
-            let conditions = (self.debug_equal_u8(&A, self.reg.a) && F == self.reg.f && self.debug_equal(&B, self.reg.get_bc()) && self.debug_equal(&D, self.reg.get_de()) && self.debug_equal(&H, self.reg.get_hl()) && self.debug_equal(&SP, self.sp) && self.debug_equal(&PC, self.pc -1));
-            // let conditions = (self.debug_equal(&PC, self.pc -1));
-            // println!("{} {}", self.debug_equal_u8(&A, self.reg.a), self.reg.a);
-            if !conditions {
-                unimplemented!("Not matching original");
+            if self.cycle == 0{
+                print!("Here")
             }
+
+            self.cycle += 1;
+            self.line += 1;
+
+
         }
+        // if LOG_LEVEL >= 3 && false{
+        //     println!("{} A:{:#04x} F:{flz}{fln}{flh}{flc} BC:{:#04x} DE:{:#04x} HL:{:#04x} SP:{:#04x} PC:{:#04x} Opcode:{:#04x} Flags:{:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+        //     // println!("{} A: {:#04x} BC: {:#04x} DE: {:#04x} HL: {:#04x} SP: {:#04x} PC: {:#04x} Opcode: {:#04x} Flags: {:#04x} ", self.cycle, self.reg.a , self.reg.get_bc(), self.reg.get_de(), self.reg.get_hl(), self.sp, self.pc - 1, op, self.reg.f);
+        //     println!("{}", self.debug_file[self.cycle]);
+        //     let line_vec: Vec<char> = self.debug_file[self.cycle].chars().collect();
+        //     let line = &self.debug_file[self.cycle];
+        //     let pos = [line.find("A:").expect("msg"), line.find("F:").expect("msg"), line.find("BC:").expect("msg"), line.find("DE:").expect("msg"), line.find("HL:").expect("msg"), line.find("SP:").expect("msg"), line.find("PC:").expect("msg")];
+        //     // println!("{} {} {}", line_vec[pos[0] + 2], line_vec[pos[0] + 3], pos[0].to_string());
+            
+        //     let mut A = String::new();
+        //     A.push(line_vec[pos[0] + 2]);
+        //     A.push(line_vec[pos[0] + 3]);
+
+
+        //     // println!("{} {} ", line_vec[pos[1] + 2], line_vec[pos[1] + 3]);
+        //     let mut F: u8 = 0;
+        //     F |= self.to_num(line_vec[pos[1] + 2] != '-') << 7;
+        //     F |= self.to_num(line_vec[pos[1] + 3] != '-')  << 6;
+        //     F |= self.to_num(line_vec[pos[1] + 4] != '-')  << 5;
+        //     F |= self.to_num(line_vec[pos[1] + 5] != '-')  << 4;
+
+        //     // println!("{:#08b} {:#08b}", F, self.reg.f);
+
+        //     let mut B = String::new();
+        //     B.push(line_vec[pos[2] + 3]);
+        //     B.push(line_vec[pos[2] + 4]);
+        //     B.push(line_vec[pos[2] + 5]);
+        //     B.push(line_vec[pos[2] + 6]);
+
+        //     let mut D = String::new();
+        //     D.push(line_vec[pos[3] + 3]);
+        //     D.push(line_vec[pos[3] + 4]);
+        //     D.push(line_vec[pos[3] + 5]);
+        //     D.push(line_vec[pos[3] + 6]);
+
+        //     let mut H = String::new();
+        //     H.push(line_vec[pos[4] + 3]);
+        //     H.push(line_vec[pos[4] + 4]);
+        //     H.push(line_vec[pos[4] + 5]);
+        //     H.push(line_vec[pos[4] + 6]);
+
+        //     let mut SP = String::new();
+        //     SP.push(line_vec[pos[5] + 3]);
+        //     SP.push(line_vec[pos[5] + 4]);
+        //     SP.push(line_vec[pos[5] + 5]);
+        //     SP.push(line_vec[pos[5] + 6]);
+
+        //     let mut PC = String::new();
+        //     PC.push(line_vec[pos[6] + 3]);
+        //     PC.push(line_vec[pos[6] + 4]);
+        //     PC.push(line_vec[pos[6] + 5]);
+        //     PC.push(line_vec[pos[6] + 6]);
+
+        //     // println!("{:#08b} {:#08b} {:#08b} {:#08b} {:#08b} {:#08b} {:#08b}", A, F, B, D, H, SP, PC);
+        //     println!("{}", line_vec[2]);
+
+        //     println!("{} {} {} {} {} {} {}", self.debug_equal_u8(&A, self.reg.a), F == self.reg.f, self.debug_equal(&B, self.reg.get_bc()), self.debug_equal(&D, self.reg.get_de()), self.debug_equal(&H, self.reg.get_hl()), self.debug_equal(&SP, self.sp), self.debug_equal(&PC, self.pc -1));
+
+        //     // println!("{} {} {}", PC, self.pc -1 , u16::from_str_radix(&PC, 16).expect("msg"));
+            
+        //     let conditions = (self.debug_equal_u8(&A, self.reg.a) && F == self.reg.f && self.debug_equal(&B, self.reg.get_bc()) && self.debug_equal(&D, self.reg.get_de()) && self.debug_equal(&H, self.reg.get_hl()) && self.debug_equal(&SP, self.sp) && self.debug_equal(&PC, self.pc -1));
+        //     // let conditions = (self.debug_equal(&PC, self.pc -1));
+        //     // println!("{} {}", self.debug_equal_u8(&A, self.reg.a), self.reg.a);
+        //     if !conditions {
+        //         unimplemented!("Not matching original");
+        //     }
+        // }
         let timing = match op {
             // Notation for LD functions:
             // LD(to_set, set_with)
@@ -370,7 +464,7 @@ impl Cpu {
 
             0x40..=0x7f => {
                 let params = op - 0x40;
-                let first_param = params / 8;
+                let first_param = (params / 8) as usize;
                 let position = (params % 8) as usize;
                 // println!("Important {} {}", params, position);
                 if position == 6 || position == 0xe {
@@ -386,13 +480,13 @@ impl Cpu {
                 } else {
                     let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
                     let second_param_final = *second_param[position];
-                    if position == 6 {
+                    if first_param == 6 {
                         self.mmu.write_byte(self.reg.get_hl(), second_param_final);
                         2
                     } else {
                         let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
                         *second_param_mut[first_param as usize] = second_param_final; 
-                        // println!("Important {} {} {}", first_param, second_param_mut[first_param as usize], second_param_final);
+                        println!("Important {} {} {} {}", position, first_param, second_param_mut[first_param as usize], second_param_final);
                         1
                     }
                 }
@@ -644,6 +738,8 @@ impl Cpu {
                             } else {
                                 value = self.rr(second_param_final);
                             }
+                            // let d = self.reg.d;
+                            // println!("Set set, {:#04x} {:#04x} {:#04x} {:#04x} {:#04x}", params, position, d, second_param_final, self.rr(second_param_final));
     
                             let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
                             *second_param_mut[position] = value; 
@@ -763,24 +859,50 @@ impl Cpu {
                     }
                     _ => unimplemented!("Unimplemented CB prefixed opcode: {:#04x}", op)
                 };
-                timing + 1
+                //timing + 1 // TODO: It turns out the opcode table already includes the timing for the extra cycle to get to the next opcode table, so adding one isn't necessary.
+                timing
             }
             _ => unimplemented!("Unimplemented opcode: {:#04x}", op),
         };
         if LOG_LEVEL >= 4 {
             print!("length of execution {}\n", timing);
         }
+        if LOG_LEVEL >= 3 {
+            let this = format!("{}", timing);
+            println!("{}", this);
+            println!("{}", self.debug_file[(self.line)]);
+            if this != self.debug_file[self.line ]{
+                unimplemented!("Not matching original");
+            }
+            self.line += 1;
+
+        }
         timing
     }
 
-    fn adc(&mut self, val: u8) {
-        let orig = self.reg.a;
-        self.reg.a = self.reg.a + val + if self.reg.get_flag(flags::C) {1} else {0};
-        self.reg.set_flag(flags::Z, self.reg.a == 0);
-        self.reg.set_flag(flags::N, false);
-        self.reg.set_flag(flags::H, ((orig >> 3) & 0b1) != ((self.reg.a >> 3) & 0b1));
-        self.reg.set_flag(flags::C, ((orig >> 7) & 0b1) != ((self.reg.a >> 7) & 0b1));
+    // fn adc(&mut self, val: u8) {
+    //     let orig = self.reg.a;
+    //     self.reg.a = self.reg.a + val + if self.reg.get_flag(flags::C) {1} else {0};
+    //     self.reg.set_flag(flags::Z, self.reg.a == 0);
+    //     self.reg.set_flag(flags::N, false);
+    //     self.reg.set_flag(flags::H, ((orig >> 3) & 0b1) != ((self.reg.a >> 3) & 0b1));
+    //     self.reg.set_flag(flags::C, ((orig >> 7) & 0b1) != ((self.reg.a >> 7) & 0b1));
 
+    // }
+
+    fn adc(&mut self, val: u8){
+        self.alu_add(val, true);
+    }
+
+    fn alu_add(&mut self, b: u8, usec: bool) {
+        let c = if usec && self.reg.get_flag(flags::C) { 1 } else { 0 };
+        let a = self.reg.a;
+        let r = a.wrapping_add(b).wrapping_add(c);
+        self.reg.set_flag(flags::Z, r == 0);
+        self.reg.set_flag(flags::H, (a & 0xF) + (b & 0xF) + c > 0xF);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::C, (a as u16) + (b as u16) + (c as u16) > 0xFF);
+        self.reg.a = r;
     }
 
     fn sbc(&mut self, val: u8) {
@@ -811,7 +933,19 @@ impl Cpu {
     }
 
     fn cp(&mut self, val: u8) {
-        self.sub_byte(self.reg.a, val);
+        let r = self.reg.a;
+        self.alu_sub(val, false);
+        self.reg.a = r;
+    }
+    fn alu_sub(&mut self, b: u8, usec: bool) {
+        let c = if usec && self.reg.get_flag(flags::C) { 1 } else { 0 };
+        let a = self.reg.a;
+        let r = a.wrapping_sub(b).wrapping_sub(c);
+        self.reg.set_flag(flags::Z, r == 0);
+        self.reg.set_flag(flags::H, (a & 0x0F) < (b & 0x0F) + c);
+        self.reg.set_flag(flags::N, true);
+        self.reg.set_flag(flags::C, (a as u16) < (b as u16) + (c as u16));
+        self.reg.a = r;
     }
 
     fn add_byte(&mut self, b: u8, usec: bool) { // TODO: Rewrite function
@@ -828,7 +962,8 @@ impl Cpu {
     fn add_word(&mut self, a: u16, b: u16) -> u16 { // TODO: Write tests
         let (result, carry) = a.overflowing_add(b);
         self.reg.set_flag(flags::C, carry);
-        self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        // self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        self.reg.set_flag(flags::H ,(a & 0x07FF) + (b & 0x07FF) > 0x07FF);
         self.reg.set_flag(flags::N, false);
         result
     }
@@ -836,7 +971,8 @@ impl Cpu {
     fn add_word_z(&mut self, a: u16, b: u16) -> u16 { // It would be good if rust had an easy way to provide optional parameters for this case https://stackoverflow.com/questions/24047686/default-function-arguments-in-rust
         let (result, carry) = a.overflowing_add(b);
         self.reg.set_flag(flags::C, carry);
-        self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        // self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
+        self.reg.set_flag(flags::H ,(a & 0x07FF) + (b & 0x07FF) > 0x07FF);
         self.reg.set_flag(flags::N, false);
         self.reg.set_flag(flags::Z, false);
         result
@@ -887,28 +1023,63 @@ impl Cpu {
         result
     }
 
-    fn rl(&mut self, val: u8) -> u8 {
-        self.reg.set_flag(flags::C, (val >> 7) == 1);
-        val.rotate_left(1)
+    // fn rl(&mut self, val: u8) -> u8 {
+    //     self.reg.set_flag(flags::C, (val >> 7) == 1);
+    //     val.rotate_left(1)
+    // }
+
+    // fn rlc(&mut self, val: u8) -> u8 {
+    //     let right_bit = if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8};
+    //     self.reg.set_flag(flags::C, (val >> 7) == 1);    
+    //     (val << 1) | right_bit
+    // }
+
+    // fn rr(&mut self, val: u8) -> u8 {
+    //     // println!("and {}", val & 1);
+    //     self.reg.set_flag(flags::C, (val & 1) == 1);
+    //     val.rotate_right(1)
+    // }
+
+    fn alu_srflagupdate(&mut self, r: u8, c: bool) {
+        self.reg.set_flag(flags::H, false);
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::Z, r == 0);
+        self.reg.set_flag(flags::C, c);
     }
 
-    fn rlc(&mut self, val: u8) -> u8 {
-        let right_bit = if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8};
-        self.reg.set_flag(flags::C, (val >> 7) == 1);    
-        (val << 1) | right_bit
+    fn rlc(&mut self, a: u8) -> u8 {
+        let c = a & 0x80 == 0x80;
+        let r = (a << 1) | (if c { 1 } else { 0 });
+        self.alu_srflagupdate(r, c);
+        return r
     }
 
-    fn rr(&mut self, val: u8) -> u8 {
-        // println!("and {}", val & 1);
-        self.reg.set_flag(flags::C, (val & 1) == 1);
-        val.rotate_right(1)
+    fn rl(&mut self, a: u8) -> u8 {
+        let c = a & 0x80 == 0x80;
+        let r = (a << 1) | (if self.reg.get_flag(flags::C) { 1 } else { 0 });
+        self.alu_srflagupdate(r, c);
+        return r
     }
 
-    fn rrc(&mut self, val: u8) -> u8 {
-        let left_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) << 7;
-        self.reg.set_flag(flags::C, (val & 1) == 1);    
-        (val >> 1) | left_bit
+    fn rr(&mut self, a: u8) -> u8 {
+        let c = a & 0x01 == 0x01;
+        let r = (a >> 1) | (if self.reg.get_flag(flags::C) { 0x80 } else { 0 });
+        self.alu_srflagupdate(r, c);
+        return r
     }
+
+    fn rrc(&mut self, a: u8) -> u8 {
+        let c = a & 0x01 == 0x01;
+        let r = (a >> 1) | (if c { 0x80 } else { 0 });
+        self.alu_srflagupdate(r, c);
+        return r
+    }
+
+    // fn rrc(&mut self, val: u8) -> u8 {
+    //     let left_bit = (if self.reg.get_flag(flags::C) {1 as u8} else {0 as u8}) << 7;
+    //     self.reg.set_flag(flags::C, (val & 1) == 1);    
+    //     (val >> 1) | left_bit
+    // }
 
     fn inc(&mut self, val: u8) -> u8 {
         let (res, carry) = val.overflowing_add(1);
