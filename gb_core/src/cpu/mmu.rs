@@ -117,7 +117,7 @@ impl MMU {
         // self.intf |= self.keypad.interrupt;
         // self.keypad.interrupt = 0;
 
-        self.ppu.do_cycle(gputicks);
+        self.ppu.cycle(gputicks);
         self.intf |= self.ppu.interrupt;
         self.ppu.interrupt = 0;
 
