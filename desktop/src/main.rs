@@ -67,16 +67,6 @@ fn draw_screen(emu: &Cpu, canvas: &mut Canvas<Window>) {
     let screen_buf = emu.get_display();
     // Now set draw color to white, iterate through each point and see if it should be drawn
     canvas.set_draw_color(Color::RGB(255, 255, 255));
-    // for (i, pixel) in screen_buf.iter().enumerate() {
-    //     canvas.set_draw_color(Color::RGB(*));
-
-    //     // Convert our 1D array's index into a 2D (x,y) position
-    //     let x = (i % SCREEN_WIDTH) as u32;
-    //     let y = (i / SCREEN_WIDTH) as u32;
-    //     // Draw a rectangle at (x,y), scaled up by our SCALE value
-    //     let rect = Rect::new((x * SCALE) as i32, (y * SCALE) as i32, SCALE, SCALE);
-    //     canvas.fill_rect(rect).unwrap();
-    // }
     for i in 0..(screen_buf.iter().len() / 3) {
         let (r, g, b) = (screen_buf[i * 3], screen_buf[(i * 3) + 1], screen_buf[(i * 3) + 2]);
         canvas.set_draw_color(Color::RGB(r, g, b));

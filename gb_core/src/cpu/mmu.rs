@@ -117,7 +117,7 @@ impl MMU {
         // self.intf |= self.keypad.interrupt;
         // self.keypad.interrupt = 0;
 
-        self.ppu.cycle(gputicks);
+        self.ppu.do_cycle(gputicks);
         self.intf |= self.ppu.interrupt;
         self.ppu.interrupt = 0;
 
@@ -249,12 +249,7 @@ impl MMU {
     }
     
     pub fn write_byte(&mut self, loc: u16, data: u8){
-        // self.ram[loc as usize] = data;
-        // if loc == 0xff01 {
-        // if loc == 0xc185 {
-        //     let v = vec![self.read_byte(0xff01)];
-        //     print!("{} ", str::from_utf8(&v).unwrap());
-        // }
+        
         if loc == 0xff01 {
             let v = vec![self.read_byte(0xff01)];
             print!("{} ", str::from_utf8(&v).unwrap());
@@ -266,7 +261,8 @@ impl MMU {
         match loc {
             // 0x0000..=0x7fff=> {unimplemented!("Attempt to write rom {:#04x}", data)}
             // 0x0000..=0x7fff=> {}
-            0x0000..=0x1fff=> {unimplemented!("Enable/Disable ram")}
+            // 0x0000..=0x1fff=> {unimplemented!("Enable/Disable ram")}
+            0x0000..=0x1fff=> {}
             // 0x2000..=0x3fff=> {unimplemented!("Bank switch {} {}", loc, data)} // Higher nibble is discarded
             0x2000..=0x3fff=>{self.current_bank = (data & 0x0F);}
             0x4000..=0x5fff=> {unimplemented!("RAM bank or additional rom bank switch, {} {} ", loc, data)}
@@ -300,14 +296,14 @@ impl MMU {
 
     pub fn read_byte(&self, loc: u16) -> u8 {
         // println!("Read {:#04x}", loc);
-        if loc == 0xc185 {
-            let v = vec![self.read_byte(0xff01)];
-            print!("{} ", str::from_utf8(&v).unwrap());
-        }
-        if loc == 0xc7f5 {
-            let v = vec![self.read_byte(0xff01)];
-            print!("{} ", str::from_utf8(&v).unwrap());
-        }
+        // if loc == 0xc185 {
+        //     let v = vec![self.read_byte(0xff01)];
+        //     print!("{} ", str::from_utf8(&v).unwrap());
+        // }
+        // if loc == 0xc7f5 {
+        //     let v = vec![self.read_byte(0xff01)];
+        //     print!("{} ", str::from_utf8(&v).unwrap());
+        // }
         match loc {
             0x0000..=0x3fff=> {self.rom[loc as usize]}
             // 0x4000..=0x7fff=> {self.rom1[(loc as usize - ROM_SIZE) as usize]} 

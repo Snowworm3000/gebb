@@ -7,10 +7,10 @@ const SCREEN_HEIGHT: usize = 144;
 struct LCDC { //LCD Control registers
     original: u8,
     lcd_enable: bool,
-    w_tile_map_area: usize,
+    w_tile_map_area: bool,
     window_enable: bool,
-    bg_and_win_tile_data_area: usize,
-    bg_tile_map_area: usize,
+    bg_and_win_tile_data_area: bool,
+    bg_tile_map_area: bool,
     obj_size: bool,
     obj_enable: bool,
     bg_and_window_display: bool,
@@ -24,25 +24,40 @@ fn wbit (data: u8, pos: u8, bit: bool) -> u8 { //Write bit
     data & !(1 << pos) | (u8::from(bit) << pos)
 }
 
+fn bn(bool: bool) -> u8 { // Bool to number
+    if bool {1} else {0}
+}
+
 impl LCDC { //LCD Control registers
     
     fn new(lcdc: u8) -> Self {
         Self {
             original: lcdc,
             lcd_enable: rbit(lcdc, 7),
-            w_tile_map_area: if rbit(lcdc, 6) {0x9800} else {0x9c00},
+            w_tile_map_area: rbit(lcdc, 6),
             window_enable: rbit(lcdc, 5),
-            bg_and_win_tile_data_area: if rbit(lcdc, 4) {0x8800} else {0x8000},
-            bg_tile_map_area: if rbit(lcdc, 3) {0x9800} else {0x9c00},
+            bg_and_win_tile_data_area: rbit(lcdc, 4),
+            bg_tile_map_area: rbit(lcdc, 3),
             obj_size: rbit(lcdc, 2),
             obj_enable: rbit(lcdc, 1),
             bg_and_window_display: rbit(lcdc, 0),
         }
     }
+    
+    fn raw(&self) -> u8 {
+        (bn(self.lcd_enable) << 7) 
+        & (bn(self.w_tile_map_area) << 6)
+        & (bn(self.window_enable) << 5)
+        & (bn(self.bg_and_win_tile_data_area) << 4) 
+        & (bn(self.bg_tile_map_area) << 3)
+        & (bn(self.obj_size) << 2)
+        & (bn(self.obj_enable) << 1)
+        & (bn(self.bg_and_window_display))
+    }
 }
 
-struct LCDS { //LCD Status registers
-    ly: u8,
+pub struct LCDS { //LCD Status registers
+    pub ly: u8,
     lyc: u8,
     stat: STAT,
 
@@ -80,20 +95,45 @@ impl STAT {
             mode_flag: (stat & 0b11)
         }
     }
+
+    fn raw(&self) -> u8 {
+        (bn(self.lcy_eq_ly_interrupt) << 6)
+        & (bn(self.mode2) << 5)
+        & (bn(self.mode1) << 4)
+        & (bn(self.mode0) << 3)
+        & (bn(self.lcy_eq_ly_flag) << 2)
+        & (self.mode_flag)
+    }
 }
 
 pub struct PPU {
     vram: [u8; VRAM_SIZE],
     voam: [u8; VOAM_SIZE],
     lcdc: LCDC,
+    pub lcds: LCDS,
+    scy: u8,
+    scx: u8,
+    wy: u8,
+    wx: u8,
+    bgp: u8, // BG palette data
 
     pub updated: bool,
     pub interrupt: u8,
     pub data: Vec<u8>,
     pub modeclock: u32,
-    pub line: u8,
+    // pub line: u8,
     hblank: bool,
     mode: u8,
+
+
+
+    palbr: u8,
+    pal0r: u8,
+    pal1r: u8,
+    palb: [u8; 4],
+    pal0: [u8; 4],
+    pal1: [u8; 4],
+    tilebase: u16,
 }
 
 impl PPU {
@@ -102,14 +142,29 @@ impl PPU {
             vram: [0; VRAM_SIZE],
             voam: [0; VOAM_SIZE],
             lcdc: LCDC::new(0),
+            lcds: LCDS::new(),
+            scy: 0,
+            scx: 0,
+            wy: 0,
+            wx: 0,
+            bgp: 0,
 
             updated: false,
             interrupt: 0,
             data: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT * 3],
             modeclock: 0,
-            line: 0,
+            // line: 0,
             hblank: false,
             mode: 0,
+
+
+            palbr: 0,
+            pal0r: 0,
+            pal1r: 1,
+            palb: [0; 4],
+            pal0: [0; 4],
+            pal1: [0; 4],
+            tilebase: 0x8000,
         }
     }
 
@@ -117,8 +172,17 @@ impl PPU {
         match loc {
             0x8000..=0x97ff => {self.vram[(loc - 0x8000) as usize]},
 
-            0xff40 => {self.lcdc.original}
-            _ => {unimplemented!("Read location not implemented! {}", loc)}
+            0xff40 => {let r = self.lcdc.raw(); r}
+            0xff41 => {self.lcds.stat.raw()}
+            0xff42 => {self.scy}
+            0xff43 => {self.scx}
+            0xff44 => {self.lcds.ly}
+            0xff45 => {self.lcds.lyc}
+            0xff47 => {self.bgp}
+            0xff4a => {self.wy}
+            0xff4b => {self.wx}
+            // _ => {unimplemented!("Read location not implemented! {:#04x}", loc)}
+            _ => 0xFF
         }
     }
     pub fn write_byte(&mut self, loc: u16, data: u8) {
@@ -126,20 +190,216 @@ impl PPU {
             0x8000..=0x97ff => {self.vram[(loc - 0x8000) as usize] = data},
 
             0xff40 => {self.lcdc = LCDC::new(data)}
-            _ => {unimplemented!("Write location not implemented! {}", loc)}
+            0xff41 => {if (self.lcds.stat.raw() & 0b111) == (data & 0b111) {self.lcds.stat = STAT::new(data)} else {panic!("Read only")}} // Check bits 0, 1, and 2 haven't been written to because they are read only.
+            0xff42 => {self.scy = data}
+            0xff43 => {self.scx = data}
+            0xff44 => {panic!("Read only")}
+            0xff45 => {self.lcds.lyc = data}
+            0xff47 => {self.bgp = data}
+            0xff4a => {self.wy = data}
+            0xff4b => {self.wx = data}
+            // _ => {unimplemented!("Write location not implemented! {}", loc)}
+            _ => {}
         }
     }
 
-    pub fn cycle(&mut self, ticks: u32) {
+    // pub fn cycle(&mut self, ticks: u32) {
+    //     self.lcds.stat.lcy_eq_ly_flag = self.lcds.ly == self.lcds.lyc;
 
+
+    // }
+    fn check_interrupt_lyc(&mut self) {
+        if self.lcds.stat.lcy_eq_ly_interrupt && self.lcds.ly == self.lcds.lyc {
+            self.interrupt |= 0x02;
+        }
+    }
+ 
+    pub fn do_cycle(&mut self, ticks: u32) {
+        // if !self.lcd_on { return }
+        self.hblank = false;
+
+        let mut ticksleft = ticks;
+
+        while ticksleft > 0 {
+            let curticks = if ticksleft >= 80 { 80 } else { ticksleft };
+            self.modeclock += curticks;
+            ticksleft -= curticks;
+
+            // Full line takes 114 ticks
+            if self.modeclock >= 456 {
+                self.modeclock -= 456;
+                self.lcds.ly = (self.lcds.ly + 1) % 154;
+                self.check_interrupt_lyc();
+
+                // This is a VBlank line
+                if self.lcds.ly >= 144 && self.mode != 1 {
+                    self.change_mode(1);
+                }
+            }
+
+            // This is a normal line
+            if self.lcds.ly < 144 {
+                if self.modeclock <= 80 {
+                    if self.mode != 2 { self.change_mode(2); }
+                } else if self.modeclock <= (80 + 172) { // 252 cycles
+                    if self.mode != 3 { self.change_mode(3); }
+                } else { // the remaining 204
+                    if self.mode != 0 { self.change_mode(0); }
+                }
+            }
+        }
     }
     
+    fn change_mode(&mut self, mode: u8) {
+        self.mode = mode;
+
+        if match self.mode {
+            0 => {
+                self.renderscan();
+                self.hblank = true;
+                self.lcds.stat.mode0
+            },
+            1 => { // Vertical blank
+                // self.wy_trigger = false;
+                self.interrupt |= 0x01;
+                self.updated = true;
+                self.lcds.stat.mode1
+            },
+            2 => self.lcds.stat.mode2,
+            3 => {
+                // if self.win_on && self.wy_trigger == false && self.lcds.ly == self.winy {
+                //     // self.wy_trigger = true;
+                //     self.wy = -1;
+                // }
+                false
+            }
+            _ => false,
+        } {
+            self.interrupt |= 0x02;
+        }
+    }
+    fn renderscan(&mut self) {
+        for x in 0 .. SCREEN_WIDTH {
+            self.setcolor(x, 255);
+        }
+        self.draw_bg();
+    }
+    fn setcolor(&mut self, x: usize, color: u8) {
+        self.data[self.lcds.ly as usize * SCREEN_WIDTH * 3 + x * 3 + 0] = color;
+        self.data[self.lcds.ly as usize * SCREEN_WIDTH * 3 + x * 3 + 1] = color;
+        self.data[self.lcds.ly as usize * SCREEN_WIDTH * 3 + x * 3 + 2] = color;
+    }
+    fn draw_bg(&mut self) {
+        let drawbg = self.lcdc.bg_and_window_display;
+
+        // let wx_trigger = self.winx <= 166;
+        // let winy = if self.wy_trigger && wx_trigger {
+        //     self.wy += 1;
+        //     self.wy
+        // }
+        // else {
+        //     -1
+        // };
+
+        // if winy < 0 && drawbg == false {
+        //     return;
+        // }
+        let winy = self.wy;
+
+        let wintiley = (winy as u16 >> 3) & 31;
+
+        let bgy = self.scy.wrapping_add(self.lcds.ly);
+        let bgtiley = (bgy as u16 >> 3) & 31;
+
+        for x in 0 .. SCREEN_WIDTH {
+            let winx = - ((self.wx as i32) - 7) + (x as i32);
+            let bgx = self.scx as u32 + x as u32;
+
+            let (tilemapbase, tiley, tilex, pixely, pixelx) = if winy >= 0 && winx >= 0 {
+                (if self.lcdc.w_tile_map_area {0x9c00} else {0x9800},
+                wintiley,
+                (winx as u16 >> 3),
+                winy as u16 & 0x07,
+                winx as u8 & 0x07)
+            } else if drawbg {
+                (if self.lcdc.bg_tile_map_area {0x9c00} else {0x9800},
+                bgtiley,
+                (bgx as u16 >> 3) & 31,
+                bgy as u16 & 0x07,
+                bgx as u8 & 0x07)
+            } else {
+                continue;
+            };
+
+            let tilenr: u8 = self.rbvram0(tilemapbase + tiley * 32 + tilex);
+
+            let (palnr, vram1, xflip, yflip, prio) = (0, false, false, false, false);
+
+            let tileaddress = self.tilebase
+            + (if self.tilebase == 0x8000 {
+                tilenr as u16
+            } else {
+                (tilenr as i8 as i16 + 128) as u16
+            }) * 16;
+
+            let a0 = match yflip {
+                false => tileaddress + (pixely * 2),
+                true => tileaddress + (14 - (pixely * 2)),
+            };
+
+            let (b1, b2) = match vram1 {
+                false => (self.rbvram0(a0), self.rbvram0(a0 + 1)),
+                true => (self.rbvram1(a0), self.rbvram1(a0 + 1)),
+            };
+
+            let xbit = match xflip {
+                true => pixelx,
+                false => 7 - pixelx,
+            } as u32;
+            let colnr = if b1 & (1 << xbit) != 0 { 1 } else { 0 }
+                | if b2 & (1 << xbit) != 0 { 2 } else { 0 };
+
+            // self.bgprio[x] =
+            //     if colnr == 0 { PrioType::Color0 }
+            //     else if prio { PrioType::PrioFlag }
+            //     else { PrioType::Normal };
+
+            let color = self.palb[colnr];
+            self.setcolor(x, color);
+            
+        }
+    }
+    fn update_pal(&mut self) {
+        for i in 0 .. 4 {
+            self.palb[i] = PPU::get_monochrome_pal_val(self.palbr, i);
+            self.pal0[i] = PPU::get_monochrome_pal_val(self.pal0r, i);
+            self.pal1[i] = PPU::get_monochrome_pal_val(self.pal1r, i);
+        }
+    }
+
+    fn get_monochrome_pal_val(value: u8, index: usize) -> u8 {
+        match (value >> 2*index) & 0x03 {
+            0 => 255,
+            1 => 192,
+            2 => 96,
+            _ => 0
+        }
+    }
+
+    fn rbvram0(&self, a: u16) -> u8 {
+        if a < 0x8000 || a >= 0xA000 { panic!("Shouldn't have used rbvram0"); }
+        self.vram[a as usize & 0x1FFF]
+    }
+    fn rbvram1(&self, a: u16) -> u8 {
+        if a < 0x8000 || a >= 0xA000 { panic!("Shouldn't have used rbvram1"); }
+        self.vram[0x2000 + (a as usize & 0x1FFF)]
+    }
 
     pub fn in_hblank(&self) -> bool {
         return self.hblank;
     }
 
-    pub fn may_hdma(&self) -> bool {
+    pub fn may_hdma(&self) -> bool { 
         false
     }
 }
@@ -149,8 +409,8 @@ mod test{
     use super::*;
     #[test]
     fn set_bit(){
-        assert_eq!(wbit(0b01011101, 3, true), 0b01010101);
-        assert_eq!(wbit(0b01000001, 2, false), 0b01000101);
+        assert_eq!(wbit(0b01010101, 3, true), 0b01011101);
+        assert_eq!(wbit(0b01000101, 2, false), 0b01000001);
         assert_eq!(wbit(0b01000101, 7, false), 0b01000101);
     }
 }

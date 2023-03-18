@@ -15,7 +15,7 @@ const RAM_SIZE: usize = 0x100; // I'm not entirely sure how large this should be
 const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
 const START_ADDR: usize = 0x0;
 
-const LOG_LEVEL: usize = 3;
+const LOG_LEVEL: usize = 2;
 
 pub struct Cpu {
     reg: Registers,
@@ -118,7 +118,7 @@ impl Cpu {
             let op = self.fetch_byte();
             self.execute(op)
         }
-    }
+    } 
 
     fn updateime(&mut self) {
         self.setdi = match self.setdi {
@@ -279,7 +279,8 @@ impl Cpu {
             }
             self.line += 1;
 
-            let this = format!("{}", self.mmu.ppu.line);
+            let this = format!("{}", self.mmu.ppu.lcds.ly);
+            // let this = format!("{}", self.mmu.ppu.line);
             println!("{}", this);
 
             println!("{}", self.debug_file[(self.line)]);
@@ -367,14 +368,15 @@ impl Cpu {
             // Notation for LD functions:
             // LD(to_set, set_with)
             // 0x00 => {if self.depth > 100 {unimplemented!("Stop")} else {self.depth += 1;1}}
-            0x00 => {if self.depth > 100 {self.pc -= 1; 1} else {self.depth += 1;1}}
+            0x00 => {1}
             0x01 => {let word = self.fetch_word(); self.reg.set_bc(word); 3}
             0x02 => {self.mmu.write_byte(self.reg.get_bc(), self.reg.a); 2}
             0x03 => {self.reg.set_bc(self.reg.get_bc().wrapping_add(1)); 2}
             0x04 => {self.reg.b = self.inc(self.reg.b); 1}
             0x05 => {self.reg.b = self.dec(self.reg.b); 1}
             0x06 => {self.reg.b = self.fetch_byte(); 2}
-            0x07 => {self.reg.a = self.rlc(self.reg.a); 1}
+            // 0x07 => {self.reg.a = self.rlc(self.reg.a); 1}
+            0x07 => { self.reg.a = self.rlc(self.reg.a); self.reg.set_flag(flags::Z, false); 1 },
             0x08 => {let word = self.fetch_word(); self.mmu.write_word(word, self.sp); 5}
             0x09 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_bc()); self.reg.set_hl(res); 2}
             0x0a => {self.reg.a = self.mmu.read_byte(self.reg.get_bc()); 2}
@@ -382,28 +384,28 @@ impl Cpu {
             0x0c => {self.reg.c = self.inc(self.reg.c); 1}
             0x0d => {self.reg.c = self.dec(self.reg.c); 1}
             0x0e => {self.reg.c = self.fetch_byte(); 2}
-            0x0f => {self.reg.a = self.rrc(self.reg.a); 1}
-
-            0x10 => {
-                // TODO: Implement functionality in game loop
-                todo!("Not implemented")
-            }
+            // 0x0f => {self.reg.a = self.rrc(self.reg.a); 1}
+            0x0f => { self.reg.a = self.rrc(self.reg.a); self.reg.set_flag(flags::Z, false); 1 },
+            // 0x10 => { self.mmu.switch_speed(); 1 }, // STOP
+            0x10 => { 1 }
             0x11 => {let word = self.fetch_word(); self.reg.set_de(word); 3}
             0x12 => {self.mmu.write_byte(self.reg.get_de(), self.reg.a); 2}
             0x13 => {self.reg.set_de(self.reg.get_de().wrapping_add(1)); 2}
             0x14 => {self.reg.d = self.inc(self.reg.d); 1}
             0x15 => {self.reg.d = self.dec(self.reg.d); 1}
             0x16 => {self.reg.d = self.fetch_byte(); 2}
-            0x17 => {self.reg.a = self.rl(self.reg.a); 1}
+            // 0x17 => {self.reg.a = self.rl(self.reg.a); 1}
+            0x17 => { self.reg.a = self.rl(self.reg.a); self.reg.set_flag(flags::Z, false); 1 },
             0x18 => {self.jr(); 3}
             0x19 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_de()); self.reg.set_hl(res); 2}
             0x1a => {self.reg.a = self.mmu.read_byte(self.reg.get_de()); 2}
-            0x1b => {self.reg.set_bc(self.reg.get_de().wrapping_sub(1)); 2}
+            // 0x1b => {self.reg.set_bc(self.reg.get_de().wrapping_sub(1)); 2}
+            0x1b => { self.reg.set_de(self.reg.get_de().wrapping_sub(1)); 2 },
             0x1c => {self.reg.e = self.inc(self.reg.e); 1}
             0x1d => {self.reg.e = self.dec(self.reg.e); 1}
             0x1e => {self.reg.e = self.fetch_byte(); 2}
-            0x1f => {self.reg.a = self.rr(self.reg.a); 1}
-            
+            // 0x1f => {self.reg.a = self.rr(self.reg.a); 1}
+            0x1F => { self.reg.a = self.rr(self.reg.a); self.reg.set_flag(flags::Z, false); 1 },
             0x20 => {if !self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x21 => {let word = self.fetch_word(); self.reg.set_hl(word); 3}
             0x22 => {let p = self.reg.get_hl(); self.reg.set_hl(p + 1); self.mmu.write_byte(p, self.reg.a); 2}
@@ -412,7 +414,7 @@ impl Cpu {
             0x25 => {self.reg.h = self.dec(self.reg.h); 1}
             0x26 => {self.reg.h = self.fetch_byte(); 2}
             0x27 => { // DAA - Decimal adjust accumulator to get a correct BCD representation after an arithmetic instruction.
-                self.reg.a = self.daa(self.reg.a); 1
+                self.daa(); 1
             }
             0x28 => {if self.reg.get_flag(flags::Z) {self.jr(); 3} else {self.pc += 1; 2}}
             0x29 => {let res = self.add_word(self.reg.get_hl(), self.reg.get_hl()); self.reg.set_hl(res); 2}
@@ -425,8 +427,9 @@ impl Cpu {
 
             0x30 => {if !self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x31 => {self.sp = self.fetch_word(); 3}
-            0x32 => {let p = self.reg.get_hl(); self.reg.set_hl(p - 1); self.mmu.write_byte(p - 1, self.reg.a); 2}
-            0x33 => {self.sp += 1; 2}
+            // 0x32 => {let p = self.reg.get_hl(); self.reg.set_hl(p - 1); self.mmu.write_byte(p - 1, self.reg.a); 2}
+            0x32 => { self.mmu.write_byte(self.reg.hld(), self.reg.a); 2 },
+            0x33 => {self.sp = self.sp.wrapping_add(1); 2}
             0x34 => {let v = self.inc(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
             0x35 => {let v = self.dec(self.mmu.read_byte(self.reg.get_hl())); self.mmu.write_byte(self.reg.get_hl(), v); 3}
             0x36 => {let v = self.fetch_byte(); self.mmu.write_byte(self.reg.get_hl(), v); 3}
@@ -438,29 +441,13 @@ impl Cpu {
             }
             0x38 => {if self.reg.get_flag(flags::C) {self.jr(); 3} else {self.pc += 1; 2}}
             0x39 => {let res = self.add_word(self.reg.get_hl(), self.sp); self.reg.set_hl(res); 2}
-            0x3a => {let p = self.reg.get_hl(); self.reg.set_hl(p - 1); self.reg.a = self.mmu.read_byte(p - 1); 2}
-            0x3b => {self.sp -= 1; 2}
+            // 0x3a => {let p = self.reg.get_hl(); self.reg.set_hl(p - 1); self.reg.a = self.mmu.read_byte(p - 1); 2}
+            0x3a => { self.reg.a = self.mmu.read_byte(self.reg.hld()); 2 },
+            0x3b => { self.sp = self.sp.wrapping_sub(1); 2 },
             0x3c => {self.reg.a = self.inc(self.reg.a); 1}
             0x3d => {self.reg.a = self.dec(self.reg.a); 1}
             0x3e => {self.reg.a = self.fetch_byte(); 2}
             0x3f => {self.reg.set_flag(flags::C, !self.reg.get_flag(flags::C)); self.reg.set_flag(flags::N, false); self.reg.set_flag(flags::H, false); 1}
-
-            0x40 => {1} // If you ever feel useless, remember this opcode exists.
-            0x41 => {self.reg.b = self.reg.c; 1}
-            0x42 => {self.reg.b = self.reg.d; 1}
-            0x43 => {self.reg.b = self.reg.e; 1}
-            0x44 => {self.reg.b = self.reg.h; 1}
-            0x45 => {self.reg.b = self.reg.l; 1}
-            0x46 => {self.reg.b = self.mmu.read_byte(self.reg.get_hl()); 2}
-            0x47 => {self.reg.b = self.reg.a; 1}
-            0x48 => {self.reg.c = self.reg.b; 1}
-            0x49 => {1}
-            0x4a => {self.reg.c = self.reg.d; 1}
-            0x4b => {self.reg.c = self.reg.e; 1}
-            0x4c => {self.reg.c = self.reg.h; 1}
-            0x4d => {self.reg.c = self.reg.l; 1}
-            0x4e => {self.reg.c = self.mmu.read_byte(self.reg.get_hl()); 2}
-            0x4f => {self.reg.c = self.reg.a; 1}
 
             0x40..=0x7f => {
                 let params = op - 0x40;
@@ -470,8 +457,9 @@ impl Cpu {
                 if position == 6 || position == 0xe {
                     let value = self.mmu.read_byte(self.reg.get_hl());
                     if first_param == 6 {
-                        println!("Halt at {:#04x} {} {} {} {}", op, self.cycle, position, params, first_param);
-                        unimplemented!("Halt!");
+                        // println!("Halt at {:#04x} {} {} {} {}", op, self.cycle, position, params, first_param);
+                        // unimplemented!("Halt!");
+                        self.halted = true
                     } else {
                         let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
                         *second_param_mut[first_param as usize] = value;
@@ -486,7 +474,7 @@ impl Cpu {
                     } else {
                         let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
                         *second_param_mut[first_param as usize] = second_param_final; 
-                        println!("Important {} {} {} {}", position, first_param, second_param_mut[first_param as usize], second_param_final);
+                        // println!("Important {} {} {} {}", position, first_param, second_param_mut[first_param as usize], second_param_final);
                         1
                     }
                 }
@@ -527,12 +515,14 @@ impl Cpu {
                 let position = (params % 8) as usize;
                 if position == 6 {
                     let value = self.mmu.read_byte(self.reg.get_hl());
-                    self.reg.a = self.sub_byte(self.reg.a, value);
+                    // self.reg.a = self.sub_byte(self.reg.a, value);
+                    self.sub(value, false);
                     2
                 } else {
                     let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
                     let second_param_final = *second_param[position];
-                    self.reg.a = self.sub_byte(self.reg.a, second_param_final); 
+                    // self.reg.a = self.sub_byte(self.reg.a, second_param_final); 
+                    self.sub(second_param_final, false);
                     1
                 }
             }
@@ -542,12 +532,14 @@ impl Cpu {
                 let position = (params % 8) as usize;
                 if position == 6 {
                     let value = self.mmu.read_byte(self.reg.get_hl());
-                    self.sbc(value);
+                    // self.sbc(value);
+                    self.sub(value, true);
                     2
                 } else {
                     let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
                     let second_param_final = *second_param[position];
-                    self.sbc(second_param_final); 
+                    // self.sbc(second_param_final); 
+                    self.sub(second_param_final, true);
                     1
                 }
             }
@@ -611,12 +603,10 @@ impl Cpu {
                     1
                 }
             }
-
-            
-
             0xc0 => {if !self.reg.get_flag(flags::Z) {self.ret(); 5} else {2}}
-            0xc1 => {let v = self.pop(); self.reg.set_bc(v); 3}
-            0xc2 => {if !self.reg.get_flag(flags::Z) {self.pc = self.fetch_word(); 4} else {3}}
+            0xc1 => { let v = self.pop(); self.reg.set_bc(v); 3 },
+            // 0xc2 => {if !self.reg.get_flag(flags::Z) {self.pc = self.fetch_word(); 4} else {3}}
+            0xc2 => { if !self.reg.get_flag(flags::Z) { self.pc = self.fetch_word(); 4 } else { self.pc += 2; 3 } },
             0xc3 => {self.pc = self.fetch_word(); 4}
             0xc4 => {if !self.reg.get_flag(flags::Z) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
             0xc5 => {self.push(self.reg.get_bc()); 4}
@@ -624,37 +614,38 @@ impl Cpu {
             0xc7 => {self.call(0x00); 4}
             0xc8 => {if self.reg.get_flag(flags::Z) {self.ret(); 5} else {2}}
             0xc9 => {self.ret(); 4}
-            0xca => {if self.reg.get_flag(flags::Z) {self.jr(); 4} else {3}}
+            0xca => { if self.reg.get_flag(flags::Z) { self.pc = self.fetch_word(); 4 } else { self.pc += 2; 3 } },
             
             0xcc => {if self.reg.get_flag(flags::Z) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
             0xcd => {self.push(self.pc + 2); self.pc = self.fetch_word(); 6}
             0xce => {let v = self.fetch_byte(); self.adc(v); 2}
             0xcf => {self.call(0x08); 4}
-
             0xd0 => {if !self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
-            0xd1 => {let v = self.pop(); self.reg.set_de(v); 3}
-            0xd2 => {if !self.reg.get_flag(flags::C) {self.pc = self.fetch_word(); 4} else {3}}
+            0xd1 => { let v = self.pop(); self.reg.set_de(v); 3 },
+            0xd2 => { if !self.reg.get_flag(flags::C) { self.pc = self.fetch_word(); 4 } else { self.pc += 2; 3 } },
             0xd4 => {if !self.reg.get_flag(flags::C) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
             0xd5 => {self.push(self.reg.get_de()); 4}
-            0xd6 => {let v = self.fetch_byte(); self.reg.a = self.sub_byte(self.reg.a, v); 2}
+            // 0xd6 => {let v = self.fetch_byte(); self.reg.a = self.sub_byte(self.reg.a, v); 2}
+            0xd6 => { let v = self.fetch_byte(); self.sub(v, false); 2 },
             0xd7 => {self.call(0x10); 4}
             0xd8 => {if self.reg.get_flag(flags::C) {self.ret(); 5} else {2}}
             0xd9 => {self.reti(); 4}
-            0xda => {if self.reg.get_flag(flags::C) {self.jr(); 4} else {3}}
+            0xda => { if self.reg.get_flag(flags::C) { self.pc = self.fetch_word(); 4 } else { self.pc += 2; 3 } },
 
             0xdc => {if self.reg.get_flag(flags::C) { self.push(self.pc + 2); self.pc = self.fetch_word(); 6} else {self.pc += 2; 3}}
 
-            0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
+            // 0xde => {let v = self.fetch_byte(); self.sbc(v); 2}
+            0xde => { let v = self.fetch_byte(); self.sub(v, true); 2 },
             0xdf => {self.call(0x18); 4}
 
             0xe0 => {let v =  0xff00 | self.fetch_byte() as u16; self.mmu.write_byte(v, self.reg.a); 3}
-            0xe1 => {let v = self.pop(); self.reg.set_hl(v); 3}
+            0xe1 => { let v = self.pop(); self.reg.set_hl(v); 3 },
             0xe2 => {self.mmu.write_byte((0xff00 + (self.reg.c as u16)) as u16, self.reg.a); 2}
 
             0xe5 => {self.push(self.reg.get_hl()); 4}
             0xe6 => {let v = self.fetch_byte(); self.and(v); 2}
             0xe7 => {self.call(0x20); 4}
-            0xe8 => {let v = self.fetch_word(); self.add_word_z(self.sp, v); 4}
+            0xe8 => { self.sp = self.add16imm(self.sp); 4 },
             0xe9 => {self.pc = self.reg.get_hl(); 1}
             0xea => {let pointer = self.fetch_word(); self.mmu.write_byte(pointer, self.reg.a); 4}
 
@@ -663,30 +654,22 @@ impl Cpu {
 
             // 0xf0 => {let v = self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 3}
             0xf0 => {let v = 0xFF00 | self.fetch_byte() as u16; self.reg.a = self.mmu.read_byte(v); 3 }
-            0xf1 => { // This pop is slightly different.
-                let v = self.pop(); self.reg.set_af(v); 
-                // self.reg.set_flag(flags::Z, (v >> 6) & 0b1 == 1);
-                // self.reg.set_flag(flags::N, (v >> 5) & 0b1 == 1);
-                // self.reg.set_flag(flags::H, (v >> 4) & 0b1 == 1);
-                // self.reg.set_flag(flags::C, (v >> 3) & 0b1 == 1);
-                3
-            }
+            // 0xf1 => { // This pop is slightly different.
+            //     let v = self.pop(); self.reg.set_af(v); 
+            //     // self.reg.set_flag(flags::Z, (v >> 6) & 0b1 == 1);
+            //     // self.reg.set_flag(flags::N, (v >> 5) & 0b1 == 1);
+            //     // self.reg.set_flag(flags::H, (v >> 4) & 0b1 == 1);
+            //     // self.reg.set_flag(flags::C, (v >> 3) & 0b1 == 1);
+            //     3
+            // }
+            0xf1 => { let v = self.pop() & 0xFFF0; self.reg.set_af(v); 3 },
             0xf2 => {let v = self.reg.c as u16; self.reg.a = self.mmu.read_byte(0xff00 + v); 2}
             0xf3 => {self.di(); 1}
             
             0xf5 => {self.push(self.reg.get_af()); 4}
             0xf6 => {let v = self.fetch_byte(); self.or(v); 2}
-            0xf7 => {self.call(0x30); 4}
-            0xf8 => {
-                let v = (self.fetch_word() as i8) as u16; 
-                let res = self.sp + v as u16;
-                self.reg.set_hl(res); 
-                self.reg.set_flag(flags::Z, false);
-                self.reg.set_flag(flags::N, false);
-                self.reg.set_flag(flags::H, (res & 0x0F) + 1 > 0x0F);
-                self.reg.set_flag(flags::C, (res & 0x00FF) + 1 > 0x00FF);
-                3
-            }
+            0xf7 => { self.push(self.pc); self.pc = 0x30; 4 },
+            0xf8 => { let r = self.add16imm(self.sp); self.reg.set_hl(r); 3 },
             0xf9 => {self.sp = self.reg.get_hl(); 2}
             0xfa => {let pointer = self.fetch_word(); self.reg.a = self.mmu.read_byte(pointer); 4}
             0xfb => {self.ei(); 1}
@@ -696,11 +679,16 @@ impl Cpu {
 
             0xcb => {
                 let op = self.fetch_byte();
-                let timing = match op {
+                let timing = match op { 
                     0x00..=0x0f => {
                         let params = op;
                         if (params % 8) == 6 || (params % 8) == 0xe {
-                            let value = self.rlc(self.mmu.read_byte(self.reg.get_hl()));
+                            let value;
+                            if params == 6 {
+                                value = self.rlc(self.mmu.read_byte(self.reg.get_hl()));
+                            } else {
+                                value = self.rrc(self.mmu.read_byte(self.reg.get_hl()));
+                            }
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -714,6 +702,7 @@ impl Cpu {
                             } else {
                                 value = self.rrc(second_param_final);
                             }
+                            // println!("{} {} {}", second_param_final, value, position);
 
                             let second_param_mut = [&mut self.reg.b, &mut self.reg.c, &mut self.reg.d, &mut self.reg.e, &mut self.reg.h, &mut self.reg.l, &mut 0, &mut self.reg.a];
                             *second_param_mut[position] = value; 
@@ -723,7 +712,12 @@ impl Cpu {
                     0x10..=0x1f => {
                         let params = op - 0x10;
                         if (params % 8) == 6 || (params % 8) == 0xe {
-                            let value = self.rl(self.mmu.read_byte(self.reg.get_hl()));
+                            let value;
+                            if params == 6 {
+                                value = self.rl(self.mmu.read_byte(self.reg.get_hl()));
+                            } else {
+                                value = self.rr(self.mmu.read_byte(self.reg.get_hl()));
+                            }
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -749,7 +743,12 @@ impl Cpu {
                     0x20..=0x2f => {
                         let params = op - 0x20;
                         if (params % 8) == 6 || (params % 8) == 0xe {
-                            let value = self.sla(self.mmu.read_byte(self.reg.get_hl()));
+                            let value;
+                            if params == 6 {
+                                value = self.sla(self.mmu.read_byte(self.reg.get_hl()));
+                            } else {
+                                value = self.sra(self.mmu.read_byte(self.reg.get_hl()));
+                            }
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -772,7 +771,12 @@ impl Cpu {
                     0x30..=0x3f => {
                         let params = op - 0x30;
                         if (params % 8) == 6 || (params % 8) == 0xe {
-                            let value = self.swap(self.mmu.read_byte(self.reg.get_hl()));
+                            let value;
+                            if params == 6 {
+                                value = self.swap(self.mmu.read_byte(self.reg.get_hl()));
+                            } else {
+                                value = self.srl(self.mmu.read_byte(self.reg.get_hl()));
+                            }
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -797,15 +801,17 @@ impl Cpu {
                         let first_param = params / 8;
                        
                         // println!("{:#04x} to set {} ", params, first_param);
-                        if (params % 8) == 6 || (params % 8) == 0xe {
-                            self.bit(first_param, self.mmu.read_byte(self.reg.get_hl()));
+                        if (params % 8) == 6 {
+                            // println!("{} {}", first_param, op);
+                            self.bit(self.mmu.read_byte(self.reg.get_hl()), first_param);
                             3
                         } else {
                             let second_param = [&self.reg.b, &self.reg.c, &self.reg.d, &self.reg.e, &self.reg.h, &self.reg.l, &0, &self.reg.a]; 
                             let position = (params % 8) as usize;
     
                             let second_param_final = *second_param[position];
-                            self.bit(first_param, second_param_final);
+                            // println!("{} {} {}", second_param_final, first_param, op);
+                            self.bit(second_param_final, first_param);
                             2
                         }
                     }
@@ -815,9 +821,9 @@ impl Cpu {
                         let first_param = params / 8;
                        
                         // println!("{:#04x} to set {} ", params, first_param);
-                        if (params % 8) == 6 || (params % 8) == 0xe {
+                        if (params % 8) == 6 {
                             let value = self.res(first_param, self.mmu.read_byte(self.reg.get_hl()));
-                            println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
+                            // println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -842,7 +848,7 @@ impl Cpu {
                         // println!("{:#04x} to set {} ", params, first_param);
                         if (params % 8) == 6 || (params % 8) == 0xe {
                             let value = self.set(first_param, self.mmu.read_byte(self.reg.get_hl()));
-                            println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
+                            // println!("val: {:#04x} orig: {:#04x} {}", value, self.mmu.read_byte(self.reg.get_hl()), first_param);
                             self.mmu.write_byte(self.reg.get_hl(), value);
                             4
                         } else {
@@ -869,7 +875,7 @@ impl Cpu {
         }
         if LOG_LEVEL >= 3 {
             let this = format!("{}", timing);
-            println!("{}", this);
+            println!("{}", this); 
             println!("{}", self.debug_file[(self.line)]);
             if this != self.debug_file[self.line ]{
                 unimplemented!("Not matching original");
@@ -915,21 +921,38 @@ impl Cpu {
         self.reg.set_flag(flags::C, (val + carry) > orig);
     }
 
-    fn daa(&mut self, hex: u8) -> u8 {
-        let mut high = hex & 0xF0;
-        let mut low = hex & 0x0F;
-        self.reg.set_flag(flags::H, false);
-        if low > 9 {
-            high += low - 9;
-            low -= 9;
-            self.reg.set_flag(flags::C, true);
-            self.reg.set_flag(flags::Z, (high & low) == 0);
-            return high & low;
+    // fn daa(&mut self, hex: u8) -> u8 {
+    //     let mut high = hex & 0xF0;
+    //     let mut low = hex & 0x0F;
+    //     self.reg.set_flag(flags::H, false);
+    //     if low > 9 {
+    //         high += low - 9;
+    //         low -= 9;
+    //         self.reg.set_flag(flags::C, true);
+    //         self.reg.set_flag(flags::Z, (high & low) == 0);
+    //         return high & low;
+    //     } else {
+    //         self.reg.set_flag(flags::C, false);
+    //         self.reg.set_flag(flags::Z, hex == 0);
+    //         return hex;
+    //     }
+    // }
+    fn daa(&mut self) {
+        let mut a = self.reg.a;
+        let mut adjust = if self.reg.get_flag(flags::C) { 0x60 } else { 0x00 };
+        if self.reg.get_flag(flags::H) { adjust |= 0x06; };
+        if !self.reg.get_flag(flags::N) {
+            if a & 0x0F > 0x09 { adjust |= 0x06; };
+            if a > 0x99 { adjust |= 0x60; };
+            a = a.wrapping_add(adjust);
         } else {
-            self.reg.set_flag(flags::C, false);
-            self.reg.set_flag(flags::Z, hex == 0);
-            return hex;
+            a = a.wrapping_sub(adjust);
         }
+
+        self.reg.set_flag(flags::C, adjust >= 0x60);
+        self.reg.set_flag(flags::H, false);
+        self.reg.set_flag(flags::Z, a == 0);
+        self.reg.a = a;
     }
 
     fn cp(&mut self, val: u8) {
@@ -946,6 +969,14 @@ impl Cpu {
         self.reg.set_flag(flags::N, true);
         self.reg.set_flag(flags::C, (a as u16) < (b as u16) + (c as u16));
         self.reg.a = r;
+    }
+    fn add16imm(&mut self, a: u16) -> u16 { 
+        let b = self.fetch_byte() as i8 as i16 as u16;
+        self.reg.set_flag(flags::N, false);
+        self.reg.set_flag(flags::Z, false);
+        self.reg.set_flag(flags::H, (a & 0x000F) + (b & 0x000F) > 0x000F);
+        self.reg.set_flag(flags::C, (a & 0x00FF) + (b & 0x00FF) > 0x00FF);
+        return a.wrapping_add(b)
     }
 
     fn add_byte(&mut self, b: u8, usec: bool) { // TODO: Rewrite function
@@ -1097,6 +1128,17 @@ impl Cpu {
         self.reg.set_flag(flags::H, (val & 0x0F) == 0);
         res
     }
+    fn sub(&mut self, b: u8, usec: bool) {
+        let c = if usec && self.reg.get_flag(flags::C) { 1 } else { 0 };
+        let a = self.reg.a;
+        let r = a.wrapping_sub(b).wrapping_sub(c);
+        self.reg.set_flag(flags::Z, r == 0);
+        self.reg.set_flag(flags::H, (a & 0x0F) < (b & 0x0F) + c);
+        self.reg.set_flag(flags::N, true);
+        self.reg.set_flag(flags::C, (a as u16) < (b as u16) + (c as u16));
+        self.reg.a = r;
+    }
+
 
     fn jr(&mut self) {
         let offset = self.fetch_byte() as i8;
@@ -1138,24 +1180,39 @@ impl Cpu {
         self.mmu.read_word(self.sp - 2) // rr = popped value
     }
 
-    fn sla(&mut self, val: u8) -> u8 { // Shift left arithmetically
-        let res = val << 1;
-        let carry = (val >> 7) == 1;
-        self.reg.unset_flags();
-        self.reg.set_flag(flags::Z, res == 0);
-        self.reg.set_flag(flags::C, carry);
-        res
+    // fn sla(&mut self, val: u8) -> u8 { // Shift left arithmetically
+    //     let res = val << 1;
+    //     let carry = (val >> 7) == 1;
+    //     self.reg.unset_flags();
+    //     self.reg.set_flag(flags::Z, res == 0);
+    //     self.reg.set_flag(flags::C, carry);
+    //     res
+    // }
+
+    // fn sra(&mut self, val: u8) -> u8 { // Shift right arithmetically
+    //     let msb = val >> 7; // Most significant bit
+    //     let res = (val >> 1) & msb;
+    //     let carry = (val & 0b1) == 1;
+    //     self.reg.unset_flags();
+    //     self.reg.set_flag(flags::Z, res == 0);
+    //     self.reg.set_flag(flags::C, carry);
+    //     res
+    // }
+
+    fn sla(&mut self, a: u8) -> u8 {
+        let c = a & 0x80 == 0x80;
+        let r = a << 1;
+        self.alu_srflagupdate(r, c);
+        return r
     }
 
-    fn sra(&mut self, val: u8) -> u8 { // Shift right arithmetically
-        let msb = val >> 7; // Most significant bit
-        let res = (val >> 1) & msb;
-        let carry = (val & 0b1) == 1;
-        self.reg.unset_flags();
-        self.reg.set_flag(flags::Z, res == 0);
-        self.reg.set_flag(flags::C, carry);
-        res
+    fn sra(&mut self, a: u8) -> u8 {
+        let c = a & 0x01 == 0x01;
+        let r = (a >> 1) | (a & 0x80);
+        self.alu_srflagupdate(r, c);
+        return r
     }
+
 
     fn srl(&mut self, val: u8) -> u8 { // Shift right logically
         let res = val >> 1;
@@ -1174,11 +1231,17 @@ impl Cpu {
         lth | htl
     }
 
-    fn bit(&mut self, position: u8, val: u8) {
-        let bit = (val >> position) & 0b1;
-        self.reg.set_flag(flags::Z, bit == 1);
+    // fn bit(&mut self, position: u8, val: u8) {
+    //     let bit = (val >> position) & 0b1;
+    //     self.reg.set_flag(flags::Z, bit == 1);
+    //     self.reg.set_flag(flags::N, false);
+    //     self.reg.set_flag(flags::H, true);
+    // }
+    fn bit(&mut self, a: u8, b: u8) {
+        let r = a & (1 << (b as u32)) == 0; 
         self.reg.set_flag(flags::N, false);
         self.reg.set_flag(flags::H, true);
+        self.reg.set_flag(flags::Z, r);
     }
 
     fn res(&self, position: u8, val: u8) -> u8 { // TODO: Write unit test for this
