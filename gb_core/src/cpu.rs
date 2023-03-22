@@ -279,8 +279,8 @@ impl Cpu {
             }
             self.line += 1;
 
-            let this = format!("{}", self.mmu.ppu.lcds.ly);
-            // let this = format!("{}", self.mmu.ppu.line);
+            // let this = format!("{}", self.mmu.ppu.lcds.ly);
+            let this = format!("{}", self.mmu.ppu.line);
             println!("{}", this);
 
             println!("{}", self.debug_file[(self.line)]);
