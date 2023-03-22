@@ -3,6 +3,7 @@ pub mod cpu;
 pub mod mbc;
 pub mod ppu;
 pub mod timer;
+pub mod joypad;
 
 mod debug_reader {
     use std::{

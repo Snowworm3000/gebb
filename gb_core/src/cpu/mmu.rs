@@ -1,5 +1,6 @@
 use crate::mbc;
 use crate::ppu::PPU;
+use crate::joypad::Joypad;
 use crate::timer::Timer;
 use std::str;
 
@@ -28,6 +29,7 @@ pub struct MMU {
     wram: [u8; ROM_SIZE],
     wram1: [u8; ROM_SIZE],
     pub ppu: PPU,
+    pub joypad: Joypad,
     hdma_status: DMAType,
     hdma_src: u16,
     hdma_dst: u16,
@@ -56,6 +58,7 @@ impl MMU {
             wram: [0xff; ROM_SIZE],
             wram1: [0xff; ROM_SIZE],
             ppu: PPU::new(),
+            joypad: Joypad::new(),
             hdma_src: 0,
             hdma_dst: 0,
             hdma_status: DMAType::NoDMA,
@@ -270,6 +273,7 @@ impl MMU {
             0xA000..=0xbfff=> {self.ram[(loc - 0xA000) as usize] = data;}
             0xc000..=0xcfff=> {self.wram[(loc - 0xc000) as usize] = data;}
             0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize] = data;}
+            0xFF00 => {self.joypad.write(data)}
             0xFF04 ..= 0xFF07 => self.timer.wb(loc, data),
             0xFF0F => self.intf = data,
             0xff00..=0xff3f => {self.io[(loc - 0xff00) as usize] = data}
@@ -314,9 +318,10 @@ impl MMU {
             0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize]}
             0xfe00 ..= 0xfe9f => {self.ppu.read_byte(loc)},
             0xfea0..=0xfeff=> {0xFF}
+            0xFF00 => {self.joypad.read()}
             0xFF04 ..= 0xFF07 => self.timer.rb(loc),
             0xFF0F => self.intf,
-            0xff00=> {0xff}
+            // 0xff00=> {0xff}
             0xff00..=0xff3f => {self.io[(loc - 0xff00) as usize]}
             0xFF40 ..= 0xFF4F => self.ppu.read_byte(loc),
             // 0xff50..=0xff67 => {self.io[(loc - 0xff00) as usize]}

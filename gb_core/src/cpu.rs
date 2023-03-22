@@ -25,7 +25,7 @@ pub struct Cpu {
     ime: bool,
     tempIme: bool,
     stack: [u16; STACK_SIZE],
-    mmu: MMU,
+    pub mmu: MMU,
     depth: u8,
     halt: bool,
     cycle: usize,

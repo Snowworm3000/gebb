@@ -7,6 +7,7 @@ use sdl2::video::Window;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use sdl2::keyboard::Keycode;
 
 const SCALE: u32 = 2;
 const SCREEN_WIDTH: usize = 160;
@@ -20,7 +21,8 @@ fn main() {
         // TODO: Add this back for release build
         // println!("Usage: cargo run path/to/game");
         // return;
-        args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/02-interrupts.gb")];
+        args = vec![String::from(""), String::from("./tetris.gb")];
+        // args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/02-interrupts.gb")];
     }
 
     let mut gb = Cpu::new();
@@ -45,9 +47,21 @@ fn main() {
     'gameloop: loop {
         for evt in event_pump.poll_iter() {
             match evt {
-                Event::Quit { .. } => {
+                Event::Quit { .. } | Event::KeyDown{keycode: Some(Keycode::Escape), ..} => {
                     break 'gameloop;
-                }
+                },
+                Event::KeyDown{keycode: Some(key), ..} => {
+                    if let Some((key, select)) = key_code((key)) {
+                        gb.mmu.joypad.select = select;
+                        gb.mmu.joypad.down(key);
+                    }
+                },
+                Event::KeyUp{keycode: Some(key), ..} => {
+                    if let Some((key, select)) = key_code((key)) {
+                        gb.mmu.joypad.select = select;
+                        gb.mmu.joypad.up(key);
+                    }
+                },
                 _ => (),
             }
         }
@@ -57,6 +71,21 @@ fn main() {
         if gb.ppu_updated() {
             draw_screen(&gb, &mut canvas)
         }
+    }
+}
+
+fn key_code(key: Keycode) -> Option<(u8, bool)> {
+    match key {
+        Keycode::Right => Some((0, false)),
+        Keycode::Left => Some((1, false)),
+        Keycode::Up => Some((2, false)),
+        Keycode::Down => Some((3, false)),
+
+        Keycode::C => Some((0, true)), // This is actually A (on the gameboy), but the C key is a nicer keybind for a keyboard.
+        Keycode::X => Some((1, true)), // Actually B
+        Keycode::Q => Some((2, true)), // Actually Start
+        Keycode::W => Some((3, true)), // Actually Select
+        _ => {None}
     }
 }
 
