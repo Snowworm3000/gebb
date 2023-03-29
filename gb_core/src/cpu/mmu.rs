@@ -179,9 +179,6 @@ impl MMU {
     }
 
     fn perform_hdma(&mut self) -> u32 {
-        if self.ppu.may_hdma() == false {
-            return 0;
-        }
 
         self.perform_vramdma_row();
         if self.hdma_len == 0x7F { self.hdma_status = DMAType::NoDMA; }
