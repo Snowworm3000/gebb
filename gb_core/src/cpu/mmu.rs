@@ -273,6 +273,7 @@ impl MMU {
             0xA000..=0xbfff=> {self.ram[(loc - 0xA000) as usize] = data;}
             0xc000..=0xcfff=> {self.wram[(loc - 0xc000) as usize] = data;}
             0xd000..=0xdfff=> {self.wram1[(loc - 0xd000) as usize] = data;}
+            0xfe00 ..= 0xfe9f => {self.ppu.write_byte(loc, data)},
             0xFF00 => {self.joypad.write(data)}
             0xFF04 ..= 0xFF07 => self.timer.wb(loc, data),
             0xFF0F => self.intf = data,

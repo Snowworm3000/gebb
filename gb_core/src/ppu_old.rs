@@ -109,6 +109,7 @@ impl STAT {
 pub struct PPU {
     vram: [u8; VRAM_SIZE],
     voam: [u8; VOAM_SIZE],
+    tile_map: [u8; 32 * 32 * 8],
     lcdc: LCDC,
     pub lcds: LCDS,
     scy: u8,
@@ -154,6 +155,7 @@ impl PPU {
         Self {
             vram: [0; VRAM_SIZE],
             voam: [0; VOAM_SIZE],
+            tile_map: [0; 32 * 32 * 8],
             lcdc: LCDC::new(0),
             lcds: LCDS::new(),
             scy: 0,
@@ -359,13 +361,35 @@ impl PPU {
         for x in 0 .. SCREEN_WIDTH {
             self.setcolor(x, 255);
         }
-        // self.draw_bg();
-        let mut background_map: [u8; 32 * 32] = [0; 32 * 32];
+        // self.draw_bg(); 
+        let mut background_map: [u8; 32] = [0; 32];
 
         for x in background_map {
-            let pixel_x = (self.scx / 8 + x) & 0x1F;
-            // self.setcolor(x as usize, self.vram[(pixel_x as usize + ((self.lcds.ly as usize) * 256))]);
+            // let pixel_x = (self.scx / 8 + x) & 0x1F;
+            // let pixel_y = (self.scy + self.lcds.ly) & 0xFF;
+
+            // println!("{} {}", pixel_x, pixel_y);
+            // self.setcolor(x as usize, self.vram[(pixel_x as usize + ((pixel_y as usize) * 256))]);
+
+            let winx = - ((self.wx as i32) - 7) + (x as i32);
+            let tilex = (winx as u16 >> 3);
+            let tilemapbase = self.lcdc.bg_and_window_display;
+            
+
+            // let winy = if self.lcdc.lcd_enable && self.wy_trigger && wx_trigger {
+            //     self.wy += 1;
+            //     self.wy
+            // }
+            // else {
+            //     -1
+            // };
+            // let tiley = (winy as u16 >> 3) & 31;
+
+            // let tilenr: u8 = self.rbvram0(tilemapbase + tiley * 32 + tilex);
+
         }
+
+        
 
         // let map_offset = if self.lcdc.bg_tile_map_area {0x9800} else {0x9c00};
         // let data_offset = if self.lcdc.bg_and_win_tile_data_area {0x8800} else {0x8000};
@@ -391,6 +415,25 @@ impl PPU {
         //     // self.setcolor(x, pixel);
         // }
     }
+
+    // fn updatetile(&self, addr: u16, val: u8) {
+    //     // Get the "base address" for this tile row
+    //     addr &= 0x1FFE;
+
+    //     // Work out which tile and row was updated
+    //     let tile = (addr >> 4) & 511;
+    //     let y = (addr >> 1) & 7;
+
+    //     let sx;
+    //     for x in 0..7 {
+    //         // Find bit index for this pixel
+    //         sx = 1 << (7-x);
+
+    //         // Update tile set
+    //         self.tile_map[tile][y][x] = (if ((self.vram[addr as usize] & sx) >> x == 1) {1} else {0}) | (if ((self.vram[(addr+1) as usize] & sx)  >> x == 1) {2} else {0});
+    //     }
+    // }
+
     fn setcolor(&mut self, x: usize, color: u8) {
         // println!("ly {} x {}", self.lcds.ly, x);
         if self.lcds.ly as usize * SCREEN_WIDTH * 3 + x * 3 + 2 >= 69120 { return }

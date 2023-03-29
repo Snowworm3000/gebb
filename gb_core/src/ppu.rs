@@ -409,7 +409,7 @@ impl PPU {
                 bgx as u8 & 0x07)
             } else {
                 continue;
-            };
+            }; 
 
             let tilenr: u8 = self.rbvram0(tilemapbase + tiley * 32 + tilex);
 

@@ -1252,15 +1252,6 @@ impl Cpu {
         val & !(1 << position) | (u8::from(1) << position)
     }
 
-    fn add16(&mut self, b: u16) {
-        let a = self.reg.get_hl();
-        let r = a.wrapping_add(b);
-        self.reg.set_flag(flags::H, (a & 0x07FF) + (b & 0x07FF) > 0x07FF);
-        self.reg.set_flag(flags::N, false);
-        self.reg.set_flag(flags::C, a > 0xFFFF - b);
-        self.reg.set_hl(r);
-    }
-
 }
 
 

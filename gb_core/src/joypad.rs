@@ -40,9 +40,12 @@ impl Joypad {
     }
 
     pub fn read(&self) -> u8 {
+        
         if self.select {
+            // println!("{:#b}", self.keysA);
             self.keysA
         } else {
+            // println!("{:#b}", self.keysD);
             self.keysD
         }
     }

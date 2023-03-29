@@ -53,13 +53,13 @@ fn main() {
                 Event::KeyDown{keycode: Some(key), ..} => {
                     if let Some((key, select)) = key_code((key)) {
                         gb.mmu.joypad.select = select;
-                        gb.mmu.joypad.down(key);
+                        gb.mmu.joypad.up(key);
                     }
                 },
                 Event::KeyUp{keycode: Some(key), ..} => {
                     if let Some((key, select)) = key_code((key)) {
                         gb.mmu.joypad.select = select;
-                        gb.mmu.joypad.up(key);
+                        gb.mmu.joypad.down(key);
                     }
                 },
                 _ => (),
