@@ -66,8 +66,10 @@ impl Cpu {
         self.mmu.load(data);
     }
     
-    pub fn get_display(&self) -> &Vec<u8> {
-        &self.mmu.ppu.data
+    pub fn get_display(&self) -> &[u8] {
+        // &self.mmu.ppu.data
+        
+        &self.mmu.ppu.screen_buffer.as_ref()
     }
 
     pub fn do_cycle(&mut self) -> u32 {

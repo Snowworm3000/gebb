@@ -98,6 +98,9 @@ fn draw_screen(emu: &Cpu, canvas: &mut Canvas<Window>) {
     canvas.set_draw_color(Color::RGB(255, 255, 255));
     for i in 0..(screen_buf.iter().len() / 3) {
         let (r, g, b) = (screen_buf[i * 3], screen_buf[(i * 3) + 1], screen_buf[(i * 3) + 2]);
+        // if r != 0{
+        //     // println!("color {} {} {}", r, g, b);
+        // }
         canvas.set_draw_color(Color::RGB(r, g, b));
 
         let x = (i % SCREEN_WIDTH) as u32;
