@@ -73,8 +73,7 @@ impl PPU {
             0xFF49 => self.obp1 = value,
             0xFF4A => self.wy = value,
             0xFF4B => self.wx = value,
-            // _ => panic!("Invalid PPU write at address {:04x}", address),
-            _ => {},
+            _ => panic!("Invalid PPU write at address {:04x}", address),
         }
     }
 
@@ -88,29 +87,25 @@ impl PPU {
 
                 // Check for LYC coincidence
                 if self.ly == self.lyc {
-                    self.stat |= 0b0100_0000; // Set LYC=LY coincidence flag
-                    if self.stat & 0b0100_0000 != 0 && self.stat & 0b0010_0000 != 0 {
-                        // If LYC=LY coincidence interrupt enabled
+                    self.stat |= (1 << 6); // Set LYC=LY flag
+                    if self.stat & (1 << 6) != 0 && self.stat & (1 << 5) != 0 {
+                        // If LYC=LY interrupt enabled
                         // and mode 2 (OAM search) interrupt enabled
-                        // then request interrupt
-                        // todo!("request interrupt")
-                        self.interrupt |= 0x02;
+                        self.interrupt |= 0x02; // Request interrupt
                     }
                 } else {
-                    self.stat &= !0b0100_0000; // Clear LYC=LY coincidence flag
+                    self.stat &= !(1 << 6); // Clear LYC=LY coincidence flag
                 }
     
                 if self.ly == 144 {
                     // Vblank
                     self.stat = (self.stat & !0b11) | 0b01; // Set mode to 1 (Vblank)
-                    // todo!("render frame")
                     self.render_scanline();
                     self.interrupt |= 0x01;
                     self.updated = true;
                 } else {
                     // Switch to OAM search
                     self.stat = (self.stat & !0b11) | 0b10; // Set mode to 2 (OAM search)
-                    // self.render_scanline();
                 }
             }
             // Vblank
@@ -125,20 +120,15 @@ impl PPU {
             }
             // OAM search
             2 => {
-                // TODO: OAM search
                 self.stat = (self.stat & !0b11) | 0b11; // Set mode to 3 (LCD transfer)
             }
             // LCD transfer
             3 => {
-                // TODO: LCD transfer
-                // self.render_scanline();
                 self.stat = (self.stat & !0b11) | 0b00; // Set mode to 0 (Hblank)
     
-                if self.stat & 0b0000_1000 != 0 {
+                if self.stat & (1 << 3) != 0 {
                     // If mode 0 (Hblank) interrupt enabled
-                    // then request interrupt
-                    // todo!("request interrupt")
-                    self.interrupt |= 0x02;
+                    self.interrupt |= 0x02; // Request interrupt
                 }
             }
             _ => unreachable!(),
@@ -146,29 +136,58 @@ impl PPU {
     }
     
     fn render_scanline(&mut self) {
-        let background_enabled = self.lcdc & 0b0000_0001 != 0;
-        let sprites_enabled = self.lcdc & 0b0000_0010 != 0;
+        let background_enabled = self.lcdc & 0b1 != 0;
+        let sprites_enabled = self.lcdc & 0b10 != 0;
     
+        let output: [u8; 144 * 160];
+        let background_buffer;
+        let sprite_buffer;
         if background_enabled {
-            // TODO: Render background
-            self.render_background(self.ly as u32); 
+            background_buffer = self.render_background();
+
+            if sprites_enabled {
+                sprite_buffer = self.render_sprites();
+                output = self.merge(background_buffer, sprite_buffer);
+            } else {
+                output = background_buffer
+            }
+            self.render(output);
         }
-    
-        if sprites_enabled {
-            // TODO: Render sprites
+    }   
+
+    fn merge(&self, bg: [u8; 160 * 144], spr: [u8; 160 * 144]) -> [u8; 160 * 144] {
+        let mut merged = [0; 160 * 144];
+        for (index, bg_pixel) in bg.into_iter().enumerate() {
+            let spr_pixel = spr[index];
+
+            // Sprite is visible
+            if (spr_pixel != 0) & (((self.lcdc >> 1) & 0b1) == 1) { 
+                merged[index] = spr_pixel;
+            } else {
+                merged[index] = bg_pixel;
+            }
         }
-    }    
-    
-    fn render_background(&mut self, ly: u32) {
-        let bg_enabled = self.lcdc & 0b0000_0001 != 0;
-        let bg_tile_map_select = (self.lcdc & 0b0000_1000) >> 3;
-        let bg_tile_set_select = (self.lcdc & 0b0001_0000) >> 4;
+        merged
+    }
+    fn render(&mut self, buffer: [u8; 160 * 144]) {
+        for row in 0..144 {
+            for col in 0..160 {
+                let pixel_offset = (row * 160 + col) * 3;
+                let pixel = buffer[row * 160 + col];
+                let colours = self.to_rgb(pixel);
+                self.screen_buffer[pixel_offset] = colours.0;
+                self.screen_buffer[pixel_offset + 1] = colours.1;
+                self.screen_buffer[pixel_offset + 2] = colours.2;
+            }
+        }
+    }
+
+    fn render_background(&mut self) -> [u8; 160 * 144] {
+        let mut background_buffer = [0; 160 * 144];
+        let bg_tile_map_select = (self.lcdc >> 3) & 0b1;
+        let bg_tile_set_select = (self.lcdc >> 4) & 0b1;
         let scroll_y = self.scy;
         let scroll_x = self.scx;
-    
-        if !bg_enabled {
-            return;
-        }
     
         let tile_map_base = if bg_tile_map_select == 0 {
             0x9800 - 0x8000
@@ -183,12 +202,6 @@ impl PPU {
         };
     
         let tile_size = 8;
-    
-        // let row = ly as usize;
-        // println!("{}", row);
-        // if ly >= 144 {
-        //     return;
-        // }
         for row in 0..144 {
             for col in 0..160 {
                 let x = col as u8;
@@ -217,16 +230,14 @@ impl PPU {
                     3 => (self.bgp & 0b1100_0000) >> 6,
                     _ => unreachable!(),
                 };
-    
-                let pixel_offset = (row * 160 + col) * 3;
-                let colours = self.to_rgb(colour);
-                self.screen_buffer[pixel_offset] = colours.0;
-                self.screen_buffer[pixel_offset + 1] = colours.1;
-                self.screen_buffer[pixel_offset + 2] = colours.2;
+
+                let pixel_offset = (row * 160 + col);
+                background_buffer[pixel_offset] = colour;
             }
         }
     
         self.updated = true;
+        background_buffer
     }
 
     fn to_rgb(&self, colour: u8) -> (u8, u8, u8) {
@@ -238,5 +249,62 @@ impl PPU {
             _ => {panic!("undefined colour {}", colour)}
         }
     }
+
+    fn render_sprites(&mut self) -> [u8; 144 * 160] {
+        let mut sprite_buffer = [0; 144 * 160];
+        let sprite_height = if self.lcdc & (1 << 2) != 0 { 16 } else { 8 };
+    
+        for row in 0..144 {
+            for col in 0..40 {
+                let sprite_addr = 0xFE00 + col * 4;
+                let y_pos = self.read_byte(sprite_addr) as i16 - 16;
+                let x_pos = self.read_byte(sprite_addr + 1) as i16 - 8;
+                let tile_num = self.read_byte(sprite_addr + 2);
+                let attributes = self.read_byte(sprite_addr + 3);
+        
+                // Check if sprite intersects with scanline
+                if y_pos <= row as i16 && y_pos + sprite_height > row as i16 {
+        
+                    let tile_row = if attributes & (1 << 6) != 0 {
+                        (sprite_height - 1) - (row as i16 - y_pos)
+                    } else {
+                        row as i16 - y_pos
+                    }; 
+        
+                    // Read sprite tile data from VRAM
+                    let tile_addr = if sprite_height == 16 {
+                        0x8000 + (tile_num & 0xFE) as u16 * 16
+                    } else {
+                        0x8000 + tile_num as u16 * 16
+                    };
+                    let tile_lo = self.read_byte(tile_addr + tile_row as u16 * 2);
+                    let tile_hi = self.read_byte(tile_addr + tile_row as u16 * 2 + 1);
+        
+                    for i in 0..8 {
+                        let color_bit = 7 - i;
+                        let color_num = ((tile_hi >> color_bit) & 1) << 1 | ((tile_lo >> color_bit) & 1);
+                        let color_addr = if attributes & (1 << 4) != 0 { 0xFF49 } else { 0xFF48 };
+                        let color = self.read_byte(color_addr) >> (color_num * 2) & 0b11;
+        
+                        let pixel_x = (x_pos + i) as usize;
+                        let pixel_y = row as usize;
+        
+                        // Draw pixel if it's not transparent
+                        if color_num != 0 && pixel_x < 160 && pixel_y < 144 {
+                            if attributes & (1 << 5) != 0 {
+                                // Flip horizontally
+                                sprite_buffer[(pixel_y * 160) + (159 - pixel_x)] = color;
+                            } else {
+                                sprite_buffer[(pixel_y * 160) + pixel_x] = color;
+                            }
+                        }
+                    }
+                }
+    
+            }
+        }
+        sprite_buffer
+    }
+    
     
 }
