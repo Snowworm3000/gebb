@@ -15,14 +15,11 @@ const SCREEN_HEIGHT: usize = 144;
 const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (SCREEN_HEIGHT as u32) * SCALE;
 
+// Gets input rom path and starts main loop
 fn main() {
     let mut args: Vec<_> = env::args().collect();
     if args.len() != 2 {
-        // TODO: Add this back for release build
-        // println!("Usage: cargo run path/to/game");
-        // return;
         args = vec![String::from(""), String::from("./tetris.gb")];
-        // args = vec![String::from(""), String::from("/home/ethan/code/rust/roms/gb-test-roms/cpu_instrs/individual/02-interrupts.gb")];
     }
 
     let mut gb = Cpu::new();
@@ -98,9 +95,6 @@ fn draw_screen(emu: &Cpu, canvas: &mut Canvas<Window>) {
     canvas.set_draw_color(Color::RGB(255, 255, 255));
     for i in 0..(screen_buf.iter().len() / 3) {
         let (r, g, b) = (screen_buf[i * 3], screen_buf[(i * 3) + 1], screen_buf[(i * 3) + 2]);
-        // if r != 0{
-        //     // println!("color {} {} {}", r, g, b);
-        // }
         canvas.set_draw_color(Color::RGB(r, g, b));
 
         let x = (i % SCREEN_WIDTH) as u32;

@@ -77,7 +77,7 @@ impl PPU {
         }
     }
 
-    pub fn execute(&mut self, cycles: u8) {
+    pub fn execute(&mut self) {
         let current_mode = self.stat & 0b11;
 
         match current_mode {

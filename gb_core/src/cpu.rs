@@ -5,18 +5,14 @@ use registers::*;
 mod mmu;
 use mmu::*;
 
-const STACK_SIZE: usize = 0xFF; // I'm not sure how large this should be either, just increase the size if anything bad happens.
-
 const LOG_LEVEL: usize = 2;
 
 pub struct Cpu {
     reg: Registers,
-    // ram: [u8; RAM_SIZE],
     pc: u16,
     sp: u16,
     ime: bool,
     tempIme: bool,
-    stack: [u16; STACK_SIZE],
     pub mmu: MMU,
     cycle: usize,
     line: usize,
@@ -30,12 +26,10 @@ impl Cpu {
     pub fn new() -> Self {
         let mut temp = Self {
             reg: Registers::new_default(),
-            // ram: [0; RAM_SIZE],
             pc: 0x100,
             sp: 0xfffe,
             ime: false,
             tempIme: false,
-            stack: [0; STACK_SIZE],
             mmu: MMU::new(),
             cycle: 0,
             line: 0,
@@ -49,26 +43,17 @@ impl Cpu {
     }
     pub fn reset(&mut self) {
         self.reg = Registers::new_default();
-        // self.ram = [0; RAM_SIZE];
         self.pc = 0x100;
         self.sp = 0xfffe;
         self.ime = false;
-        self.stack = [0; STACK_SIZE];
-        // self.mmu.reset();
         self.cycle = 0;
     }
 
     pub fn load(&mut self, data: &[u8]) {
-        // let start = START_ADDR as usize;
-        // let end = (START_ADDR as usize) + data.len();
-        // self.mmu.write(start, end, data);
-
         self.mmu.load(data);
     }
     
     pub fn get_display(&self) -> &[u8] {
-        // &self.mmu.ppu.data
-        
         &self.mmu.ppu.screen_buffer.as_ref()
     }
 
@@ -690,7 +675,7 @@ impl Cpu {
         return a.wrapping_add(b)
     }
 
-    fn add_byte(&mut self, b: u8, usec: bool) { // TODO: Rewrite function
+    fn add_byte(&mut self, b: u8, usec: bool) { 
         let carry = if usec && self.reg.get_flag(flags::C) { 1 } else { 0 };
         let a = self.reg.a;
         let res = a.wrapping_add(b).wrapping_add(carry);
@@ -701,7 +686,7 @@ impl Cpu {
         self.reg.a = res;
     }
 
-    fn add_word(&mut self, a: u16, b: u16) -> u16 { // TODO: Write tests
+    fn add_word(&mut self, a: u16, b: u16) -> u16 { 
         let (result, carry) = a.overflowing_add(b);
         self.reg.set_flag(flags::C, carry);
         // self.reg.set_flag(flags::H ,((self.reg.b as u16 + self.reg.c as u16) & 0xFF00) != 0);
@@ -832,7 +817,7 @@ impl Cpu {
         self.mmu.write_word(self.sp, val);
     }
 
-    fn pop(&mut self) -> u16 { // TODO: Checks might need to be made here.
+    fn pop(&mut self) -> u16 { 
         self.sp = self.sp + 2;
         self.mmu.read_word(self.sp - 2) // rr = popped value
     }
@@ -869,12 +854,6 @@ impl Cpu {
         lth | htl
     }
 
-    // fn bit(&mut self, position: u8, val: u8) {
-    //     let bit = (val >> position) & 0b1;
-    //     self.reg.set_flag(flags::Z, bit == 1);
-    //     self.reg.set_flag(flags::N, false);
-    //     self.reg.set_flag(flags::H, true);
-    // }
     fn bit(&mut self, a: u8, b: u8) {
         let res = a & (1 << (b as u32)) == 0; 
         self.reg.set_flag(flags::N, false);
@@ -882,7 +861,7 @@ impl Cpu {
         self.reg.set_flag(flags::Z, res);
     }
 
-    fn res(&self, position: u8, val: u8) -> u8 { // TODO: Write unit test for this
+    fn res(&self, position: u8, val: u8) -> u8 { 
         val & !(1 << position) | (u8::from(0) << position)
     }
 
